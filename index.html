@@ -141,7 +141,7 @@
 <div id="battle-layer">
     <div id="battle-top">
         <div class="hp-card" id="enemy-card">
-            <div class="mon-name">BUG.exe</div>
+            <div class="mon-name" id="enemy-name">BUG.exe</div>
             <div class="lv">Lv.7 &nbsp;|&nbsp; <span class="type-bug">■ BUG</span></div>
             <div class="hp-bar-wrap"><div class="hp-bar green" id="enemy-hp-bar" style="width:100%"></div></div>
             <div class="hp-nums"><span id="enemy-hp-cur">80</span> / <span id="enemy-hp-max">80</span></div>
@@ -266,7 +266,8 @@ function buildWorld() {
     for (let x = -10; x <= 10; x++) {
         for (let z = -10; z <= 10; z++) {
             const isGrass = Math.random() > 0.82 && (Math.abs(x)>2||Math.abs(z)>2);
-            const tile = new THREE.Mesh(new THREE.BoxGeometry(1.9,0.2,1.9), new THREE.MeshStandardMaterial({ color: isGrass ? 0x55cc55 : 0x77dd77 }));
+            const isPath = (x >= -2 && x <= 2 && z >= -6 && z <= -2); // Define the path area
+            const tile = new THREE.Mesh(new THREE.BoxGeometry(1.9,0.2,1.9), new THREE.MeshStandardMaterial({ color: isPath ? 0x777777 : isGrass ? 0x55cc55 : 0x77dd77 }));
             tile.position.set(x*TILE_SIZE,-0.1,z*TILE_SIZE); tile.receiveShadow=true; wg.add(tile);
             if (isGrass) {
                 const bl = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.4,1.6), new THREE.MeshStandardMaterial({ color: 0x228822 }));
@@ -297,12 +298,130 @@ function createTree(x,z,group) {
 }
 buildWorld();
 
+// Add NPC
+const npcGroup = new THREE.Group();
+const npcBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.7), mat(0x4444ff));
+npcBody.position.y = 0.75;
+npcBody.castShadow = true;
+npcGroup.add(npcBody);
+
+const npcHead = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat(0x9999ff));
+npcHead.position.y = 1.7;
+npcHead.castShadow = true;
+npcGroup.add(npcHead);
+
+npcGroup.position.set(-2, 0, -4); // Position near the Lab
+scene.add(npcGroup);
+window.solidObjects.push(npcGroup);
+
+// Add particle system for digital rain
+const particleCount = 500;
+const particles = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+const colors = new Float32Array(particleCount * 3);
+const sizes = new Float32Array(particleCount);
+
+const color = new THREE.Color();
+for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 100;
+    positions[i * 3 + 1] = Math.random() * 100 + 20;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+    color.setHSL(Math.random() * 0.1 + 0.6, 0.8, 0.5);
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+    sizes[i] = Math.random() * 0.5 + 0.5;
+}
+
+particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+const particleMaterial = new THREE.PointsMaterial({
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8
+});
+
+const particleSystem = new THREE.Points(particles, particleMaterial);
+scene.add(particleSystem);
+
 // ── STATE ──
 let gameState='OVERWORLD', isMoving=false, playerTurn=true, battleLocked=false;
 let playerHP=100, playerMaxHP=100, enemyHP=80, enemyMaxHP=80, healCharges=2;
 const targetPos = new THREE.Vector3();
 const battleCamPos  = new THREE.Vector3(-1, 2.8, 2.5);
 const battleCamLook = new THREE.Vector3(2.5, 1.2, -3.5);
+
+// Define the properties for different enemies
+const enemies = [
+    {
+        name: "BUG.exe",
+        hp: 80,
+        attackMessages: [
+            "BUG.exe threw a <b>SyntaxError</b>!",
+            "BUG.exe caused a <b>SegFault</b>! Memory corrupted!",
+            "BUG.exe injected <b>undefined behaviour</b>!",
+            "BUG.exe panicked: <b>index out of bounds</b>!",
+            "BUG.exe is leaking memory. HP <b>slowly draining</b>!"
+        ]
+    },
+    {
+        name: "GLITCH.js",
+        hp: 90,
+        attackMessages: [
+            "GLITCH.js caused a <b>TypeError</b>!",
+            "GLITCH.js is glitching out!",
+            "GLITCH.js corrupted your data!",
+            "GLITCH.js is unstable!"
+        ]
+    },
+    {
+        name: "MALWARE.msi",
+        hp: 100,
+        attackMessages: [
+            "MALWARE.msi is spreading!",
+            "MALWARE.msi corrupted your files!",
+            "MALWARE.msi is infecting your system!",
+            "MALWARE.msi is causing havoc!"
+        ]
+    }
+];
+
+// Add a variable to track if the player is near the NPC
+let nearNPC = false;
+
+// Initialize audio context
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+// Function to create a beep sound
+function playBeep() {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.type = 'square';
+    oscillator.frequency.value = 440;
+    gainNode.gain.value = 0.1;
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
+    oscillator.stop(audioContext.currentTime + 0.1);
+}
+
+// Function to create a crash sound
+function playCrash() {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.value = 220;
+    gainNode.gain.value = 0.2;
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+    oscillator.stop(audioContext.currentTime + 0.2);
+}
 
 // ── INPUT ──
 addEventListener('keydown', e => {
@@ -314,7 +433,10 @@ addEventListener('keydown', e => {
     if(k==='a'||e.key==='ArrowLeft')  {nx-=TILE_SIZE; playerGroup.rotation.y=-Math.PI/2;}
     if(k==='d'||e.key==='ArrowRight') {nx+=TILE_SIZE; playerGroup.rotation.y= Math.PI/2;}
     const hit=window.solidObjects.some(o=>Math.abs(o.position.x-nx)<1.1&&Math.abs(o.position.z-nz)<1.1);
-    if(!hit&&(nx!==playerGroup.position.x||nz!==playerGroup.position.z)){targetPos.set(nx,0,nz);isMoving=true;}
+    if(!hit&&(nx!==playerGroup.position.x||nz!==playerGroup.position.z)){targetPos.set(nx,0,nz);isMoving=true; playBeep();}
+    if (e.code === 'Space' && nearNPC) {
+        setOWText("It's dangerous to debug alone! Take this REFACTOR.exe!");
+    }
 });
 
 // ── LOOP ──
@@ -323,6 +445,20 @@ const clock = new THREE.Clock();
     requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
     playerGroup.position.y = Math.sin(t*3)*0.04;
+
+    // Update particle positions
+    const positions = particleSystem.geometry.attributes.position.array;
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3 + 1] -= 0.1; // Move particles downward
+        if (positions[i * 3 + 1] < 0) {
+            positions[i * 3 + 1] = 50; // Reset to top if below bottom
+        }
+    }
+    particleSystem.geometry.attributes.position.needsUpdate = true;
+
+    // Check if player is near the NPC
+    const distanceToNPC = playerGroup.position.distanceTo(npcGroup.position);
+    nearNPC = distanceToNPC < 2;
 
     if(gameState==='OVERWORLD'){
         if(isMoving){
@@ -367,7 +503,10 @@ function setOWText(h){document.getElementById('text-box').innerHTML=h;}
 function startBattleTransition(){
     const fl=document.getElementById('flash-overlay');
     let n=0;
-    setOWText("!!! Wild <b>BUG.exe</b> detected in the codebase!");
+    const randomEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+    setOWText(`!!! Wild <b>${randomEnemy.name}</b> detected in the codebase!`);
+    // Store the selected enemy in a variable accessible to other functions
+    window.currentEnemy = randomEnemy;
     (function flash(){
         if(n>=7){enterBattle();return;}
         fl.style.opacity=n%2===0?'1':'0';
@@ -376,7 +515,7 @@ function startBattleTransition(){
 }
 function enterBattle(){
     gameState='BATTLE';
-    playerHP=playerMaxHP; enemyHP=enemyMaxHP; healCharges=2;
+    playerHP=playerMaxHP; enemyHP=window.currentEnemy.hp; enemyMaxHP=window.currentEnemy.hp; healCharges=2;
     updateHPBars(); enableButtons(true);
     playerTurn=true; battleLocked=false;
     bugGroup.visible=true; bugLight.intensity=2;
@@ -385,7 +524,7 @@ function enterBattle(){
     const bl=document.getElementById('battle-layer');
     bl.style.display='flex';
     requestAnimationFrame(()=>bl.classList.add('visible'));
-    setBattleMsg("A wild <b>BUG.exe</b> appeared! &gt; Choose your action...");
+    setBattleMsg(`A wild <b>${window.currentEnemy.name}</b> appeared! > Choose your action...`);
 }
 
 // ── BATTLE ACTIONS ──
@@ -396,7 +535,8 @@ window.playerAttack=()=>{
     enemyHP=Math.max(0,enemyHP-dmg); updateHPBars(); shakeScreen();
     bugCoreMat.emissive.set(0xff0000);
     setTimeout(()=>bugCoreMat.emissive.set(0x440066),300);
-    setBattleMsg(`You used <b>[DEBUG]</b>! Injected <b>${dmg} dmg</b> into BUG.exe!`);
+    setBattleMsg(`You used <b>[DEBUG]</b>! Injected <b>${dmg} dmg</b> into ${window.currentEnemy.name}!`);
+    playCrash();
     if(enemyHP<=0){setTimeout(winBattle,900);return;}
     setTimeout(enemyTurn,1100);
 };
@@ -436,27 +576,20 @@ window.playerRun=()=>{
 
 function enemyTurn(){
     playerTurn=false;
-    const atks=[
-        {msg:"BUG.exe threw a <b>SyntaxError</b>!", d:()=>10+Math.floor(Math.random()*10)},
-        {msg:"BUG.exe caused a <b>SegFault</b>! Memory corrupted!", d:()=>14+Math.floor(Math.random()*8)},
-        {msg:"BUG.exe injected <b>undefined behaviour</b>!", d:()=>8+Math.floor(Math.random()*14)},
-        {msg:"BUG.exe panicked: <b>index out of bounds</b>!", d:()=>12+Math.floor(Math.random()*10)},
-        {msg:"BUG.exe is leaking memory. HP <b>slowly draining</b>!", d:()=>6+Math.floor(Math.random()*16)},
-    ];
-    const atk=atks[Math.floor(Math.random()*atks.length)];
-    const dmg=atk.d();
+    const atk = window.currentEnemy.attackMessages[Math.floor(Math.random() * window.currentEnemy.attackMessages.length)];
+    const dmg=10+Math.floor(Math.random()*10);
     playerHP=Math.max(0,playerHP-dmg); updateHPBars(); shakeScreen();
-    setBattleMsg(`${atk.msg} You took <b>${dmg} dmg</b>!`);
+    setBattleMsg(`${atk} You took <b>${dmg} dmg</b>!`);
     if(playerHP<=0){setTimeout(loseBattle,1000);return;}
     setTimeout(()=>{
         playerTurn=true; battleLocked=false; enableButtons(true);
-        setBattleMsg("What will you do? &gt; Choose your action...");
+        setBattleMsg("What will you do? > Choose your action...");
     },1300);
 }
 
 function winBattle(){
     enableButtons(false);
-    setBattleMsg("✅ <b>BUG.exe</b> was squashed! <b>120 XP</b> gained!");
+    setBattleMsg(`✅ <b>${window.currentEnemy.name}</b> was squashed! <b>120 XP</b> gained!`);
     document.getElementById('xp-bar').style.width='78%';
     showBanner('#00ff88','VICTORY!','BUG.exe squashed  |  Returning to OVERWORLD...');
     setTimeout(exitBattle,2600);
