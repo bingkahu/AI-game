@@ -2,646 +2,519 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Hollow Script: The Missing Semicolon</title>
+    <title>CodeMon 3D: Syntax Version</title>
     <style>
-        body {
-            background-color: #0f0f12;
-            color: #dcdcdc;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
+        * { box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Courier New', monospace; }
+
+        #flash-overlay {
+            position: fixed; inset: 0; background: white;
+            opacity: 0; pointer-events: none; z-index: 100;
         }
-        /* Wrapper clips canvas shake so it never overflows the border */
-        #canvas-wrapper {
-            position: relative;
-            width: 800px;
-            height: 480px;
-            border: 4px solid #444;
-            box-shadow: 0 0 30px rgba(0,255,100,0.22), 0 0 70px rgba(0,255,100,0.07);
-            overflow: hidden;
-            background-color: #14141c;
+
+        #battle-layer {
+            position: fixed; inset: 0; display: none;
+            flex-direction: column; z-index: 30;
+            opacity: 0; transition: opacity 0.4s ease;
         }
-        canvas {
-            position: absolute;
-            top: 0; left: 0;
-            image-rendering: pixelated;
+        #battle-layer.visible { opacity: 1; }
+
+        #battle-top {
+            flex: 1; display: flex; align-items: flex-end;
+            justify-content: space-between; padding: 24px 40px 16px;
+            background: linear-gradient(180deg, #c8eaff 0%, #a8d8ff 100%);
+            position: relative; overflow: hidden;
         }
-        #ui-layer { margin-top: 12px; text-align: center; }
-        .controls { font-size: 0.8em; color: #555; letter-spacing: 0.05em; }
-        .hud { font-size: 1.1em; color: #ff5555; font-weight: bold; letter-spacing: 0.1em; }
+        #battle-top::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: repeating-linear-gradient(transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 4px);
+            pointer-events: none;
+        }
+
+        .hp-card {
+            background: #1a1a2e; border: 3px solid #e94560;
+            border-radius: 12px; padding: 10px 16px; min-width: 220px;
+            box-shadow: 0 0 20px rgba(233,69,96,0.4), inset 0 0 10px rgba(0,0,0,0.3); z-index: 2;
+        }
+        .hp-card .mon-name {
+            font-size: 14px; letter-spacing: 3px; color: #e94560;
+            text-transform: uppercase; margin-bottom: 4px; text-shadow: 0 0 8px #e94560;
+        }
+        .hp-card .lv { font-size: 11px; color: #aaa; margin-bottom: 8px; }
+        .hp-bar-wrap { height: 12px; background: #0d0d1a; border-radius: 6px; border: 2px solid #333; overflow: hidden; }
+        .hp-bar { height: 100%; border-radius: 4px; transition: width 0.4s ease; position: relative; overflow: hidden; }
+        .hp-bar::after {
+            content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer { to { left: 200%; } }
+        .hp-bar.green  { background: linear-gradient(90deg, #00ff88, #00cc66); }
+        .hp-bar.yellow { background: linear-gradient(90deg, #ffdd00, #ff9900); }
+        .hp-bar.red    { background: linear-gradient(90deg, #ff2244, #ff6600); }
+        .hp-nums { font-size: 12px; color: #ccc; margin-top: 5px; text-align: right; }
+        .status-badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-top: 4px; letter-spacing: 1px; }
+        .status-bug { background: #6a0dad; color: #e0aaff; border: 1px solid #9d4edd; }
+        .status-ok  { background: #004d26; color: #69ff99; border: 1px solid #00cc66; }
+        .xp-bar-wrap { height: 5px; background: #0d0d1a; border-radius: 3px; margin-top: 6px; border: 1px solid #222; }
+        .xp-bar { height: 100%; background: linear-gradient(90deg, #4488ff, #88ccff); border-radius: 3px; transition: width 0.6s ease; }
+        .type-bug { color: #a8d8a8; }
+        .type-fire { color: #ffaa44; }
+        #enemy-card { align-self: flex-start; }
+        #player-card { align-self: flex-end; }
+
+        #battle-ground {
+            height: 60px;
+            background: linear-gradient(180deg, #7ec850 0%, #4a9e20 60%, #3a7e10 100%);
+            border-top: 3px solid #2d6010; position: relative; overflow: hidden;
+        }
+        #battle-ground::before {
+            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 20px;
+            background: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(0,0,0,0.08) 18px, rgba(0,0,0,0.08) 20px);
+        }
+
+        #battle-bottom { height: 160px; background: #1a1a2e; border-top: 4px solid #e94560; display: flex; position: relative; }
+        #battle-msg-box { flex: 1; padding: 16px 20px; border-right: 3px solid #2d2d4e; display: flex; flex-direction: column; justify-content: space-between; }
+        #battle-msg { font-size: 16px; color: #e0e0ff; line-height: 1.5; min-height: 60px; }
+        .msg-cursor { display: inline-block; width: 8px; height: 16px; background: #e94560; animation: blink 0.7s infinite; vertical-align: bottom; }
+        @keyframes blink { 50% { opacity: 0; } }
+        #battle-mode-label { font-size: 10px; color: #e94560; letter-spacing: 3px; opacity: 0.7; }
+
+        #cmd-grid { width: 260px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; align-content: center; }
+        .cmd-btn {
+            background: #0d0d1a; border: 2px solid #e94560; color: #e0e0ff;
+            font-family: 'Courier New', monospace; font-size: 13px; font-weight: bold;
+            letter-spacing: 1px; padding: 10px 6px; border-radius: 8px; cursor: pointer;
+            text-align: center; transition: all 0.1s ease; text-transform: uppercase;
+            overflow: hidden; box-shadow: 0 0 8px rgba(233,69,96,0.2);
+        }
+        .cmd-btn:hover:not(:disabled) { background: #e94560; color: #fff; box-shadow: 0 0 18px rgba(233,69,96,0.7); transform: scale(1.03); }
+        .cmd-btn:active:not(:disabled) { transform: scale(0.97); }
+        .cmd-btn:disabled { opacity: 0.35; cursor: not-allowed; border-color: #555; }
+        .cmd-btn .btn-type { display: block; font-size: 9px; color: #888; margin-top: 2px; font-weight: normal; }
+        .cmd-btn:hover:not(:disabled) .btn-type { color: rgba(255,255,255,0.7); }
+        #btn-run { border-color: #ff6600; color: #ff9944; }
+        #btn-run:hover:not(:disabled) { background: #ff6600; box-shadow: 0 0 18px rgba(255,102,0,0.7); }
+        #btn-heal { border-color: #00cc88; color: #66ffcc; }
+        #btn-heal:hover:not(:disabled) { background: #00aa66; box-shadow: 0 0 18px rgba(0,204,136,0.7); }
+        #bottom-logo { position: absolute; right: 12px; bottom: 8px; font-size: 9px; color: #333; letter-spacing: 2px; }
+
+        #ui-layer {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 500px; height: 140px;
+            background: #f0f0f0; border: 6px solid #444; border-radius: 15px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4); z-index: 10; transition: opacity 0.3s ease;
+        }
+        #text-box { flex: 1; padding: 15px; font-size: 18px; color: #222; font-weight: bold; background: #fff; border-bottom: 3px solid #ddd; border-radius: 10px 10px 0 0; line-height: 1.4; }
+        #ui-status { height: 35px; background: #444; color: #0f0; font-size: 12px; line-height: 35px; text-align: center; letter-spacing: 1px; border-radius: 0 0 10px 10px; }
+        .cursor { display: inline-block; width: 10px; height: 18px; background: #0f0; animation: blink 0.8s infinite; vertical-align: bottom; }
+
+        @keyframes screenShake {
+            0%,100% { transform: translate(0,0) rotate(0deg); }
+            10% { transform: translate(-8px, 4px) rotate(-1deg); }
+            20% { transform: translate(8px,-4px) rotate(1deg); }
+            30% { transform: translate(-6px, 6px) rotate(-0.5deg); }
+            40% { transform: translate(6px,-2px) rotate(0.5deg); }
+            50% { transform: translate(-4px, 4px) rotate(-0.5deg); }
+            60% { transform: translate(4px,-4px) rotate(0deg); }
+            70% { transform: translate(-2px, 2px) rotate(0deg); }
+        }
+        .shaking { animation: screenShake 0.4s ease; }
+
+        #result-banner { display: none; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center; background: rgba(0,0,0,0.78); flex-direction: column; }
+        #result-banner.show { display: flex; }
+        #result-title { font-size: 52px; font-weight: bold; letter-spacing: 6px; text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 0 40px currentColor; }
+        #result-sub { font-size: 16px; letter-spacing: 3px; color: #aaa; }
     </style>
 </head>
 <body>
 
-<div id="canvas-wrapper">
-    <canvas id="gameCanvas" width="800" height="480"></canvas>
-</div>
+<div id="flash-overlay"></div>
+
 <div id="ui-layer">
-    <div class="hud" id="statusText">STATUS: RUNNING...</div>
-    <div class="controls">ARROWS: Move &nbsp;|&nbsp; Z / SPACE: Jump &nbsp;|&nbsp; X: Debug (Attack)</div>
+    <div id="text-box">WELCOME TO SOURCE_CODE_VILLAGE... <span class="cursor"></span></div>
+    <div id="ui-status">HP: 100/100 | LVL: 5 | MODE: OVERWORLD</div>
 </div>
 
-<script>
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 1 · ARCHITECT — Global Config & State
-// ─────────────────────────────────────────────────────────────────────────────
-const canvas  = document.getElementById('gameCanvas');
-const ctx     = canvas.getContext('2d');
-const BLOCK_SIZE = 32;
+<div id="battle-layer">
+    <div id="battle-top">
+        <div class="hp-card" id="enemy-card">
+            <div class="mon-name">BUG.exe</div>
+            <div class="lv">Lv.7 &nbsp;|&nbsp; <span class="type-bug">■ BUG</span></div>
+            <div class="hp-bar-wrap"><div class="hp-bar green" id="enemy-hp-bar" style="width:100%"></div></div>
+            <div class="hp-nums"><span id="enemy-hp-cur">80</span> / <span id="enemy-hp-max">80</span></div>
+            <span class="status-badge status-bug">CORRUPTED</span>
+        </div>
+        <div class="hp-card" id="player-card">
+            <div class="mon-name">CODER.exe</div>
+            <div class="lv">Lv.5 &nbsp;|&nbsp; <span class="type-fire">■ HUMAN</span></div>
+            <div class="hp-bar-wrap"><div class="hp-bar green" id="player-hp-bar" style="width:100%"></div></div>
+            <div class="hp-nums"><span id="player-hp-cur">100</span> / <span id="player-hp-max">100</span></div>
+            <div class="xp-bar-wrap"><div class="xp-bar" id="xp-bar" style="width:42%"></div></div>
+            <span class="status-badge status-ok">ONLINE</span>
+        </div>
+    </div>
+    <div id="battle-ground"></div>
+    <div id="battle-bottom">
+        <div id="battle-msg-box">
+            <div id="battle-msg">A wild <b>BUG.exe</b> appeared!<span class="msg-cursor"></span></div>
+            <div id="battle-mode-label">▶ BATTLE MODE</div>
+        </div>
+        <div id="cmd-grid">
+            <button class="cmd-btn" id="btn-debug" onclick="playerAttack()">[DEBUG]<span class="btn-type">ATK · PWR 40</span></button>
+            <button class="cmd-btn" id="btn-heal"  onclick="playerHeal()">[REFACTOR]<span class="btn-type">HEAL · +25 HP</span></button>
+            <button class="cmd-btn" id="btn-docs"  onclick="playerDocs()">[DOCS]<span class="btn-type">STATUS · INFO</span></button>
+            <button class="cmd-btn" id="btn-run"   onclick="playerRun()">[ALT+F4]<span class="btn-type">RUN · ESCAPE</span></button>
+        </div>
+        <div id="bottom-logo">CODEMON 3D v1.0</div>
+    </div>
+</div>
 
-const keys = { right: false, left: false, up: false, attack: false };
-let gameState = "PLAY";
-let score = 0;
+<div id="result-banner">
+    <div id="result-title">VICTORY!</div>
+    <div id="result-sub">Returning to OVERWORLD...</div>
+</div>
 
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'ArrowRight') keys.right = true;
-    if (e.code === 'ArrowLeft')  keys.left  = true;
-    if (e.code === 'Space' || e.code === 'KeyZ') keys.up = true;
-    if (e.code === 'KeyX') keys.attack = true;
-    if (gameState === "GAMEOVER" && e.code === 'KeyR') resetGame();
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ── ENGINE ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 15, 55);
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ── LIGHTING ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(10, 20, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+scene.add(dirLight);
+const bugLight = new THREE.PointLight(0x9933ff, 0, 10);
+scene.add(bugLight);
+
+// ── PLAYER ──
+const playerGroup = new THREE.Group();
+const mat = c => new THREE.MeshStandardMaterial({ color: c });
+
+const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.7), mat(0xff4444));
+body.position.y = 0.7; body.castShadow = true; playerGroup.add(body);
+
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.75, 0.75), mat(0xffcc99));
+head.position.y = 1.75; head.castShadow = true; playerGroup.add(head);
+
+const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.15), mat(0x111111));
+eyes.position.set(0, 1.8, 0.4); playerGroup.add(eyes);
+
+[-0.6, 0.6].forEach(x => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.9, 0.25), mat(0xff4444));
+    arm.position.set(x, 0.6, 0); playerGroup.add(arm);
 });
-document.addEventListener('keyup', (e) => {
-    if (e.code === 'ArrowRight') keys.right = false;
-    if (e.code === 'ArrowLeft')  keys.left  = false;
-    if (e.code === 'Space' || e.code === 'KeyZ') keys.up = false;
-    if (e.code === 'KeyX') keys.attack = false;
+[-0.25, 0.25].forEach(x => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 0.3), mat(0x224488));
+    leg.position.set(x, -0.35, 0); playerGroup.add(leg);
 });
+scene.add(playerGroup);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 2 · LEVEL DESIGNER — Map Data (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-const mapLayout = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,3,0,1],
-    [1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,1],
-    [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,1],
-    [1,0,1,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,1],
-    [1,0,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-];
-const MAP_COLS = mapLayout[0].length;
-const MAP_ROWS = mapLayout.length;
-const FULL_W   = MAP_COLS * BLOCK_SIZE; // 800
-const FULL_H   = MAP_ROWS * BLOCK_SIZE; // 480
+// ── BUG MONSTER ──
+const bugGroup = new THREE.Group();
+const bugCoreMat = new THREE.MeshStandardMaterial({
+    color: 0x8800cc, emissive: 0x440066, emissiveIntensity: 0.8, metalness: 0.3, roughness: 0.2
+});
+const bugCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 1), bugCoreMat);
+bugGroup.add(bugCore);
 
-function getTile(col, row) {
-    if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return 1;
-    return mapLayout[row][col];
+const shards = [];
+const shardMat = new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0x880088, emissiveIntensity: 1, metalness: 0.8, roughness: 0.1 });
+for (let i = 0; i < 6; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), shardMat.clone());
+    s.userData = { orbitAngle: (i/6)*Math.PI*2, orbitRadius: 1.5+(i%2)*0.3, orbitSpeed: 0.8+i*0.15, orbitHeight: Math.sin(i)*0.4 };
+    shards.push(s); bugGroup.add(s);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VFX A · PARTICLE SYSTEM — Syntax Shards
-// ─────────────────────────────────────────────────────────────────────────────
-const SHARD_SYMBOLS = ['{', '}', ';', '()', '=', '*', '&', '//', '!=', '=>', '[]', '?', '++'];
-const particles = [];
-
-class Particle {
-    constructor(x, y, color) {
-        this.x      = x;
-        this.y      = y;
-        this.symbol = SHARD_SYMBOLS[Math.floor(Math.random() * SHARD_SYMBOLS.length)];
-        const angle = Math.random() * Math.PI * 2;
-        const spd   = 1.5 + Math.random() * 4.5;
-        this.vx     = Math.cos(angle) * spd;
-        this.vy     = Math.sin(angle) * spd - 2.2; // upward bias
-        this.life   = 1.0;
-        this.decay  = 0.020 + Math.random() * 0.035;
-        this.size   = 9 + Math.random() * 8;
-        this.color  = color;
-        this.rot    = Math.random() * Math.PI * 2;
-        this.rotSpd = (Math.random() - 0.5) * 0.20;
-    }
-    update() {
-        this.vy  += 0.15;   // gravity
-        this.x   += this.vx;
-        this.y   += this.vy;
-        this.vx  *= 0.96;
-        this.rot += this.rotSpd;
-        this.life -= this.decay;
-    }
-    draw(offX, offY) {
-        if (this.life <= 0) return;
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, this.life);
-        ctx.fillStyle   = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur  = 10;
-        ctx.font        = `bold ${this.size}px 'Courier New', monospace`;
-        ctx.translate(this.x - offX, this.y - offY);
-        ctx.rotate(this.rot);
-        ctx.fillText(this.symbol, 0, 0);
-        ctx.restore();
-    }
+const errMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff1111, emissiveIntensity: 0.9 });
+for (let i = 0; i < 4; i++) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.08), errMat);
+    e.userData = { orbitAngle: (i/4)*Math.PI*2+0.5, orbitRadius: 1.2, orbitSpeed: -0.5, orbitHeight: -0.3+i*0.2 };
+    shards.push(e); bugGroup.add(e);
 }
+const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.5, 3.5),
+    new THREE.MeshBasicMaterial({ color: 0xaa00ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+glow.rotation.x = -Math.PI/2; glow.position.y = -0.85;
+bugGroup.add(glow);
+bugGroup.position.set(3, 1.5, -4);
+bugGroup.visible = false;
+scene.add(bugGroup);
 
-function spawnShards(x, y, count, color) {
-    for (let i = 0; i < count; i++) particles.push(new Particle(x, y, color));
-}
-function updateParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].update();
-        if (particles[i].life <= 0) particles.splice(i, 1);
-    }
-}
+// ── WORLD ──
+const TILE_SIZE = 2;
+window.grassTiles = []; window.solidObjects = [];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VFX B · SCREEN SHAKE
-// ─────────────────────────────────────────────────────────────────────────────
-let shakeTimer = 0, shakeIntensity = 0;
-
-function triggerShake(intensity, duration) {
-    shakeIntensity = intensity;
-    shakeTimer     = duration;
-}
-function applyShake() {
-    if (shakeTimer > 0) {
-        const dx = (Math.random() - 0.5) * 2 * shakeIntensity;
-        const dy = (Math.random() - 0.5) * 2 * shakeIntensity;
-        canvas.style.transform = `translate(${dx}px, ${dy}px)`;
-        shakeIntensity *= 0.84;
-        shakeTimer--;
-    } else {
-        canvas.style.transform = 'translate(0,0)';
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VFX C · SMOOTH CAMERA — lerp viewport follows player
-// ─────────────────────────────────────────────────────────────────────────────
-let camX = 0, camY = 0;
-const CAM_LERP = 0.10;
-
-function updateCamera() {
-    const tx = player.x + player.w / 2 - canvas.width  / 2;
-    const ty = player.y + player.h / 2 - canvas.height / 2;
-    const cx = Math.max(0, Math.min(tx, FULL_W - canvas.width));
-    const cy = Math.max(0, Math.min(ty, FULL_H - canvas.height));
-    camX += (cx - camX) * CAM_LERP;
-    camY += (cy - camY) * CAM_LERP;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VFX D · CODE FOG — Parallax scrolling background text
-// ─────────────────────────────────────────────────────────────────────────────
-const CODE_LINES = [
-    'function debug(error) {', '  if (!error) return null;',
-    '  throw new SyntaxError();', '}', 'const soul = undefined;',
-    'while (alive) { run(); }', 'import { hope } from "void";',
-    'let semicolon = missing;', '// TODO: fix everything',
-    'export default darkness;', 'class Knight extends Error {',
-    '  constructor() { super(); }', '}', 'try { exist(); }',
-    'catch(e) { respawn(e); }', 'const PATH = "./hollow";',
-    '=> NullPointerException', 'git commit -m "it works"',
-    'npm run despair', '/* here be bugs */', 'if (0 === "0") { panic(); }',
-    'delete this.sanity;', 'Object.freeze(time);',
-    'Array(Infinity).fill(void 0);', 'return undefined;',
-    'this.hp = NaN;', '// edge case: death', 'resolve(nothing);',
-];
-const fogColumns = [];
-(function initFog() {
-    for (let col = 0; col < 12; col++) {
-        let y = -(Math.random() * 500);
-        const lines = [];
-        for (let i = 0; i < 32; i++) {
-            lines.push({ text: CODE_LINES[Math.floor(Math.random() * CODE_LINES.length)], y });
-            y += 20;
+function buildWorld() {
+    const wg = new THREE.Group();
+    for (let x = -10; x <= 10; x++) {
+        for (let z = -10; z <= 10; z++) {
+            const isGrass = Math.random() > 0.82 && (Math.abs(x)>2||Math.abs(z)>2);
+            const tile = new THREE.Mesh(new THREE.BoxGeometry(1.9,0.2,1.9), new THREE.MeshStandardMaterial({ color: isGrass ? 0x55cc55 : 0x77dd77 }));
+            tile.position.set(x*TILE_SIZE,-0.1,z*TILE_SIZE); tile.receiveShadow=true; wg.add(tile);
+            if (isGrass) {
+                const bl = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.4,1.6), new THREE.MeshStandardMaterial({ color: 0x228822 }));
+                bl.position.set(x*TILE_SIZE,0.2,z*TILE_SIZE); wg.add(bl);
+                window.grassTiles.push(bl);
+            }
+            if (Math.abs(x)===10||Math.abs(z)===10) createTree(x*TILE_SIZE,z*TILE_SIZE,wg);
         }
-        fogColumns.push({
-            x:     col * 75 - 10,
-            speed: 0.12 + Math.random() * 0.12,
-            alpha: 0.033 + Math.random() * 0.042,
-            lines
-        });
     }
+    const lab = new THREE.Mesh(new THREE.BoxGeometry(4,3,4), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    lab.position.set(0,1.5,-6); lab.castShadow=true; wg.add(lab); window.solidObjects.push(lab);
+    [[-.8,2,-.8],[.8,2,-.8]].forEach(([wx,wy,wz]) => {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.1), new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x4488aa, emissiveIntensity: 0.4 }));
+        w.position.set(wx,wy,wz-6); wg.add(w);
+    });
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5,2,4), new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
+    roof.position.set(0,4,-6); roof.rotation.y=Math.PI/4; wg.add(roof);
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.8,0.1), new THREE.MeshStandardMaterial({ color: 0xddbb77 }));
+    sign.position.set(1.5,0.8,-3.5); wg.add(sign); window.solidObjects.push(sign);
+    scene.add(wg);
+}
+function createTree(x,z,group) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.35,1.2), new THREE.MeshStandardMaterial({ color: 0x663300 }));
+    trunk.position.set(x,0.6,z); trunk.castShadow=true; group.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1,8,8), new THREE.MeshStandardMaterial({ color: 0x22aa22 }));
+    leaves.position.set(x,2.0,z); leaves.castShadow=true; group.add(leaves);
+    window.solidObjects.push(trunk);
+}
+buildWorld();
+
+// ── STATE ──
+let gameState='OVERWORLD', isMoving=false, playerTurn=true, battleLocked=false;
+let playerHP=100, playerMaxHP=100, enemyHP=80, enemyMaxHP=80, healCharges=2;
+const targetPos = new THREE.Vector3();
+const battleCamPos  = new THREE.Vector3(-1, 2.8, 2.5);
+const battleCamLook = new THREE.Vector3(2.5, 1.2, -3.5);
+
+// ── INPUT ──
+addEventListener('keydown', e => {
+    if (isMoving||gameState!=='OVERWORLD') return;
+    const k=e.key.toLowerCase();
+    let nx=playerGroup.position.x, nz=playerGroup.position.z;
+    if(k==='w'||e.key==='ArrowUp')    {nz-=TILE_SIZE; playerGroup.rotation.y=Math.PI;}
+    if(k==='s'||e.key==='ArrowDown')  {nz+=TILE_SIZE; playerGroup.rotation.y=0;}
+    if(k==='a'||e.key==='ArrowLeft')  {nx-=TILE_SIZE; playerGroup.rotation.y=-Math.PI/2;}
+    if(k==='d'||e.key==='ArrowRight') {nx+=TILE_SIZE; playerGroup.rotation.y= Math.PI/2;}
+    const hit=window.solidObjects.some(o=>Math.abs(o.position.x-nx)<1.1&&Math.abs(o.position.z-nz)<1.1);
+    if(!hit&&(nx!==playerGroup.position.x||nz!==playerGroup.position.z)){targetPos.set(nx,0,nz);isMoving=true;}
+});
+
+// ── LOOP ──
+const clock = new THREE.Clock();
+(function animate(){
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    playerGroup.position.y = Math.sin(t*3)*0.04;
+
+    if(gameState==='OVERWORLD'){
+        if(isMoving){
+            playerGroup.position.lerp(targetPos,0.15);
+            if(playerGroup.position.distanceTo(targetPos)<0.05){
+                playerGroup.position.copy(targetPos); playerGroup.position.y=0;
+                isMoving=false; checkGrass();
+            }
+        }
+        camera.position.lerp(new THREE.Vector3(playerGroup.position.x,10,playerGroup.position.z+12),0.1);
+        camera.lookAt(playerGroup.position);
+    }
+    if(gameState==='BATTLE'){
+        bugGroup.position.y=1.5+Math.sin(t*1.8)*0.18;
+        bugCore.rotation.x=t*0.5; bugCore.rotation.y=t*0.7;
+        shards.forEach(s=>{
+            const d=s.userData;
+            d.orbitAngle+=d.orbitSpeed*0.016;
+            s.position.x=Math.cos(d.orbitAngle)*d.orbitRadius;
+            s.position.z=Math.sin(d.orbitAngle)*d.orbitRadius;
+            s.position.y=d.orbitHeight+Math.sin(t*2+d.orbitAngle)*0.15;
+            s.rotation.x=t; s.rotation.y=t*1.3;
+        });
+        bugLight.intensity=1.5+Math.sin(t*3)*0.5;
+        bugLight.position.copy(bugGroup.position);
+        camera.position.lerp(battleCamPos,0.05);
+        camera.lookAt(battleCamLook);
+    }
+    renderer.render(scene,camera);
 })();
 
-function drawCodeFog(parallaxFactor) {
-    ctx.save();
-    ctx.font = '10px "Courier New", monospace';
-    for (const col of fogColumns) {
-        ctx.fillStyle = `rgba(60,220,120,${col.alpha})`;
-        const drawX   = col.x - camX * parallaxFactor;
-        for (const line of col.lines) {
-            line.y += col.speed;
-            if (line.y > canvas.height + 30) {
-                line.y    = -25;
-                line.text = CODE_LINES[Math.floor(Math.random() * CODE_LINES.length)];
-            }
-            ctx.fillText(line.text, drawX, line.y);
-        }
-    }
-    ctx.restore();
+// ── GRASS ──
+function checkGrass(){
+    const px=playerGroup.position.x,pz=playerGroup.position.z;
+    const onG=window.grassTiles.some(g=>Math.abs(g.position.x-px)<0.6&&Math.abs(g.position.z-pz)<0.6);
+    if(onG&&Math.random()>0.72) startBattleTransition();
+    else setOWText("Exploring the codebase... <span class='cursor'></span>");
+}
+function setOWText(h){document.getElementById('text-box').innerHTML=h;}
+
+// ── TRANSITION ──
+function startBattleTransition(){
+    const fl=document.getElementById('flash-overlay');
+    let n=0;
+    setOWText("!!! Wild <b>BUG.exe</b> detected in the codebase!");
+    (function flash(){
+        if(n>=7){enterBattle();return;}
+        fl.style.opacity=n%2===0?'1':'0';
+        n++; setTimeout(flash,n<4?80:120);
+    })();
+}
+function enterBattle(){
+    gameState='BATTLE';
+    playerHP=playerMaxHP; enemyHP=enemyMaxHP; healCharges=2;
+    updateHPBars(); enableButtons(true);
+    playerTurn=true; battleLocked=false;
+    bugGroup.visible=true; bugLight.intensity=2;
+    document.getElementById('flash-overlay').style.opacity='0';
+    document.getElementById('ui-layer').style.cssText+='opacity:0;pointer-events:none;';
+    const bl=document.getElementById('battle-layer');
+    bl.style.display='flex';
+    requestAnimationFrame(()=>bl.classList.add('visible'));
+    setBattleMsg("A wild <b>BUG.exe</b> appeared! &gt; Choose your action...");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 3 · PHYSICIST — Physics Engine (original logic preserved)
-// ─────────────────────────────────────────────────────────────────────────────
-const ghostTrail = [];
-
-class PhysicsBody {
-    constructor(x, y, w, h, color) {
-        this.x = x; this.y = y; this.w = w; this.h = h;
-        this.vx = 0; this.vy = 0; this.color = color;
-        this.speed = 5; this.jumpForce = -12; this.gravity = 0.6;
-        this.grounded = false; this.wasGrounded = false; this.justLanded = false;
-        this.isAttacking = false; this.attackTimer = 0; this.facingRight = true;
-    }
-
-    update() {
-        this.wasGrounded = this.grounded;
-        this.vy += this.gravity;
-
-        if (this === player) {
-            if (keys.right) { this.vx = this.speed;  this.facingRight = true; }
-            else if (keys.left) { this.vx = -this.speed; this.facingRight = false; }
-            else this.vx = 0;
-
-            if (keys.up && this.grounded) {
-                this.vy = this.jumpForce;
-                this.grounded = false;
-                spawnShards(this.x + this.w / 2, this.y + this.h, 5, '#88ffcc');
-            }
-
-            if (keys.attack && !this.isAttacking) {
-                this.isAttacking = true;
-                this.attackTimer = 10;
-                const sx = this.facingRight ? this.x + this.w + 10 : this.x - 10;
-                spawnShards(sx, this.y + this.h / 2, 14, '#ffffff');
-            }
-            if (this.isAttacking) { this.attackTimer--; if (this.attackTimer <= 0) this.isAttacking = false; }
-        }
-
-        // Ghost trail — only when moving fast
-        const spd = Math.abs(this.vx) + Math.abs(this.vy);
-        if (this === player && spd > 5) {
-            ghostTrail.push({ x: this.x, y: this.y, w: this.w, h: this.h, age: 0 });
-            if (ghostTrail.length > 10) ghostTrail.shift();
-        }
-
-        this.x += this.vx;
-        this.checkCollision('x');
-        this.y += this.vy;
-        this.checkCollision('y');
-
-        this.justLanded = !this.wasGrounded && this.grounded;
-        if (this.justLanded && this === player) {
-            spawnShards(this.x + this.w / 2, this.y + this.h, 7, '#aaaaff');
-            if (Math.abs(this.vy) > 0) triggerShake(2, 4); // soft land shake
-        }
-
-        if (this.y > FULL_H + 100) die();
-    }
-
-    checkCollision(axis) {
-        let left   = Math.floor(this.x / BLOCK_SIZE);
-        let right  = Math.floor((this.x + this.w - 0.1) / BLOCK_SIZE);
-        let top    = Math.floor(this.y / BLOCK_SIZE);
-        let bottom = Math.floor((this.y + this.h - 0.1) / BLOCK_SIZE);
-
-        for (let r = top; r <= bottom; r++) {
-            for (let c = left; c <= right; c++) {
-                const tile = getTile(c, r);
-                if (tile === 1) {
-                    if (axis === 'x') {
-                        if (this.vx > 0) {
-                            this.x = c * BLOCK_SIZE - this.w;
-                            if (this === player) spawnShards(this.x + this.w, this.y + this.h / 2, 5, '#ff9955');
-                        }
-                        if (this.vx < 0) {
-                            this.x = (c + 1) * BLOCK_SIZE;
-                            if (this === player) spawnShards(this.x, this.y + this.h / 2, 5, '#ff9955');
-                        }
-                        this.vx = 0;
-                    } else {
-                        if (this.vy > 0) { this.y = r * BLOCK_SIZE - this.h; this.grounded = true; }
-                        if (this.vy < 0) this.y = (r + 1) * BLOCK_SIZE;
-                        this.vy = 0;
-                    }
-                } else if (tile === 2 && this === player) { die(); }
-                  else if (tile === 3 && this === player) { win(); }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 4 · ARTIST — Upgraded rendering
-// ─────────────────────────────────────────────────────────────────────────────
-function drawLevel() {
-    for (let r = 0; r < MAP_ROWS; r++) {
-        for (let c = 0; c < MAP_COLS; c++) {
-            const tile = mapLayout[r][c];
-            const wx   = Math.round(c * BLOCK_SIZE - camX);
-            const wy   = Math.round(r * BLOCK_SIZE - camY);
-            if (wx > canvas.width  + BLOCK_SIZE || wx < -BLOCK_SIZE) continue;
-            if (wy > canvas.height + BLOCK_SIZE || wy < -BLOCK_SIZE) continue;
-
-            if (tile === 1) {
-                const g = ctx.createLinearGradient(wx, wy, wx + BLOCK_SIZE, wy + BLOCK_SIZE);
-                g.addColorStop(0, '#484858');
-                g.addColorStop(1, '#282832');
-                ctx.fillStyle = g;
-                ctx.fillRect(wx, wy, BLOCK_SIZE, BLOCK_SIZE);
-                ctx.fillStyle = 'rgba(255,255,255,0.07)';   // top highlight
-                ctx.fillRect(wx, wy, BLOCK_SIZE, 2);
-                ctx.strokeStyle = '#111116';
-                ctx.lineWidth   = 1;
-                ctx.strokeRect(wx, wy, BLOCK_SIZE, BLOCK_SIZE);
-                ctx.fillStyle = 'rgba(0,255,100,0.022)';    // green tint line
-                ctx.fillRect(wx, wy, BLOCK_SIZE, 1);
-            } else if (tile === 2) {
-                ctx.fillStyle   = '#cc1111';
-                ctx.shadowColor = '#ff2222';
-                ctx.shadowBlur  = 14;
-                ctx.beginPath();
-                ctx.moveTo(wx,              wy + BLOCK_SIZE);
-                ctx.lineTo(wx + 16,         wy);
-                ctx.lineTo(wx + BLOCK_SIZE, wy + BLOCK_SIZE);
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            } else if (tile === 3) {
-                const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 300);
-                ctx.shadowColor = `rgba(0,255,100,${pulse})`;
-                ctx.shadowBlur  = 26 * pulse;
-                ctx.fillStyle   = `rgba(0,255,100,${0.7 + 0.3 * pulse})`;
-                ctx.font        = 'bold 26px monospace';
-                ctx.fillText('};', wx + 2, wy + 26);
-                ctx.shadowBlur  = 0;
-            }
-        }
-    }
-}
-
-function drawGhostTrail() {
-    for (let i = ghostTrail.length - 1; i >= 0; i--) {
-        const g      = ghostTrail[i];
-        g.age++;
-        const frac   = i / ghostTrail.length;
-        const shrink = (1 - frac) * 6;
-        ctx.save();
-        ctx.globalAlpha = frac * 0.30;
-        ctx.fillStyle   = '#6699ff';
-        ctx.shadowColor = '#6699ff';
-        ctx.shadowBlur  = 14;
-        ctx.fillRect(
-            Math.round(g.x - camX + shrink / 2),
-            Math.round(g.y - camY + shrink / 2),
-            g.w - shrink, g.h - shrink
-        );
-        ctx.restore();
-        if (g.age > 8) ghostTrail.splice(i, 1);
-    }
-}
-
-function drawPlayer(p) {
-    const px = Math.round(p.x - camX);
-    const py = Math.round(p.y - camY);
-
-    // ── Squash & stretch based on vertical velocity
-    let scaleX = 1, scaleY = 1;
-    if (!p.grounded) {
-        if (p.vy < -3)     { scaleY = 1.22; scaleX = 0.80; }  // rising: tall & thin
-        else if (p.vy > 3) { scaleY = 0.84; scaleX = 1.16; }  // falling: wide & short
-    } else if (p.justLanded) {
-        scaleY = 0.68; scaleX = 1.32;                          // landing squash
-    }
-
-    const drawW = p.w * scaleX;
-    const drawH = p.h * scaleY;
-    const drawX = px + (p.w - drawW) / 2;
-    const drawY = py + (p.h - drawH);      // anchor to feet
-
-    ctx.save();
-
-    // Outer body glow
-    ctx.shadowColor = p.isAttacking ? '#ffffff' : '#88bbff';
-    ctx.shadowBlur  = p.isAttacking ? 32 : 14;
-
-    // Body gradient
-    const bg = ctx.createLinearGradient(drawX, drawY, drawX + drawW, drawY + drawH);
-    bg.addColorStop(0,   '#ddeeff');
-    bg.addColorStop(0.5, '#aabbdd');
-    bg.addColorStop(1,   '#7788aa');
-    ctx.fillStyle = bg;
-    ctx.fillRect(drawX, drawY, drawW, drawH);
-
-    // Hollow inner void
-    ctx.shadowBlur = 0;
-    ctx.fillStyle  = 'rgba(8,8,18,0.55)';
-    ctx.fillRect(drawX + drawW * 0.2, drawY + drawH * 0.2, drawW * 0.6, drawH * 0.45);
-
-    // Eye sockets
-    ctx.fillStyle = '#000010';
-    const eyeY   = drawY + drawH * 0.17;
-    const eyeH   = drawH * 0.24;
-    const eyeW   = drawW * 0.16;
-    if (p.facingRight) {
-        ctx.fillRect(drawX + drawW * 0.54, eyeY, eyeW,        eyeH);
-        ctx.fillRect(drawX + drawW * 0.72, eyeY, eyeW * 0.65, eyeH);
+// ── BATTLE ACTIONS ──
+window.playerAttack=()=>{
+    if(!playerTurn||battleLocked)return;
+    battleLocked=true; enableButtons(false);
+    const dmg=18+Math.floor(Math.random()*18);
+    enemyHP=Math.max(0,enemyHP-dmg); updateHPBars(); shakeScreen();
+    bugCoreMat.emissive.set(0xff0000);
+    setTimeout(()=>bugCoreMat.emissive.set(0x440066),300);
+    setBattleMsg(`You used <b>[DEBUG]</b>! Injected <b>${dmg} dmg</b> into BUG.exe!`);
+    if(enemyHP<=0){setTimeout(winBattle,900);return;}
+    setTimeout(enemyTurn,1100);
+};
+window.playerHeal=()=>{
+    if(!playerTurn||battleLocked)return;
+    if(healCharges<=0){setBattleMsg("⚠ <b>REFACTOR</b> failed — no charges remaining!");return;}
+    battleLocked=true; enableButtons(false);
+    const heal=22+Math.floor(Math.random()*8);
+    playerHP=Math.min(playerMaxHP,playerHP+heal); healCharges--;
+    updateHPBars();
+    setBattleMsg(`You used <b>[REFACTOR]</b>! Restored <b>${heal} HP</b>. (${healCharges} charge${healCharges!==1?'s':''} left)`);
+    setTimeout(enemyTurn,1100);
+};
+window.playerDocs=()=>{
+    if(!playerTurn||battleLocked)return;
+    battleLocked=true; enableButtons(false);
+    const msgs=[
+        "📄 <b>[DOCS]</b> › BUG.exe: corrupted runtime entity. Weakness: type assertions.",
+        "📄 <b>[DOCS]</b> › Stack trace: <i>NullPointerException at line ∞</i>",
+        "📄 <b>[DOCS]</b> › ERROR 404: documentation not found. Classic.",
+        "📄 <b>[DOCS]</b> › BUG.exe has been in prod for 3 years. Nobody dares touch it.",
+    ];
+    setBattleMsg(msgs[Math.floor(Math.random()*msgs.length)]);
+    setTimeout(enemyTurn,1300);
+};
+window.playerRun=()=>{
+    if(!playerTurn||battleLocked)return;
+    battleLocked=true; enableButtons(false);
+    if(Math.random()>0.45){
+        setBattleMsg("🏃 You pressed <b>ALT+F4</b>... but the process is unresponsive!");
+        setTimeout(enemyTurn,1200);
     } else {
-        ctx.fillRect(drawX + drawW * 0.26, eyeY, eyeW,        eyeH);
-        ctx.fillRect(drawX + drawW * 0.10, eyeY, eyeW * 0.65, eyeH);
+        setBattleMsg("🏃 <b>ALT+F4</b> executed! Process terminated. You escaped!");
+        setTimeout(exitBattle,1400);
     }
-    // White glint
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    if (p.facingRight) ctx.fillRect(drawX + drawW * 0.56, eyeY + 2, 3, 3);
-    else               ctx.fillRect(drawX + drawW * 0.28, eyeY + 2, 3, 3);
+};
 
-    // Attack — the Semicolon strike
-    if (p.isAttacking) {
-        const progress = 1 - (p.attackTimer / 10);
-        ctx.save();
-        ctx.globalAlpha = 1 - progress * 0.7;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth   = 4;
-        ctx.shadowColor = '#aaffff';
-        ctx.shadowBlur  = 24;
-        const sx  = p.facingRight ? drawX + drawW + 2 : drawX - 42;
-        const dir = p.facingRight ? 1 : -1;
-        ctx.beginPath();
-        ctx.moveTo(sx, drawY + drawH * 0.30);
-        ctx.lineTo(sx + dir * 38, drawY + drawH * 0.30);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(sx + dir * 8, drawY + drawH * 0.52, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.restore();
-    }
-    ctx.restore();
+function enemyTurn(){
+    playerTurn=false;
+    const atks=[
+        {msg:"BUG.exe threw a <b>SyntaxError</b>!", d:()=>10+Math.floor(Math.random()*10)},
+        {msg:"BUG.exe caused a <b>SegFault</b>! Memory corrupted!", d:()=>14+Math.floor(Math.random()*8)},
+        {msg:"BUG.exe injected <b>undefined behaviour</b>!", d:()=>8+Math.floor(Math.random()*14)},
+        {msg:"BUG.exe panicked: <b>index out of bounds</b>!", d:()=>12+Math.floor(Math.random()*10)},
+        {msg:"BUG.exe is leaking memory. HP <b>slowly draining</b>!", d:()=>6+Math.floor(Math.random()*16)},
+    ];
+    const atk=atks[Math.floor(Math.random()*atks.length)];
+    const dmg=atk.d();
+    playerHP=Math.max(0,playerHP-dmg); updateHPBars(); shakeScreen();
+    setBattleMsg(`${atk.msg} You took <b>${dmg} dmg</b>!`);
+    if(playerHP<=0){setTimeout(loseBattle,1000);return;}
+    setTimeout(()=>{
+        playerTurn=true; battleLocked=false; enableButtons(true);
+        setBattleMsg("What will you do? &gt; Choose your action...");
+    },1300);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 5 · COMBAT DESIGNER — Enemies
-// ─────────────────────────────────────────────────────────────────────────────
-class Enemy {
-    constructor(x, y) {
-        this.x = x; this.y = y; this.w = 32; this.h = 32;
-        this.speed = 2; this.dir = 1; this.distMoved = 0; this.limit = 100;
-        this.alive = true; this.pulse = Math.random() * Math.PI * 2;
-    }
-    update() {
-        if (!this.alive) return;
-        this.x += this.speed * this.dir;
-        this.distMoved += this.speed;
-        if (this.distMoved > this.limit) { this.dir *= -1; this.distMoved = 0; }
-
-        const ox = player.x + player.w / 2 - (this.x + this.w / 2);
-        const oy = player.y + player.h / 2 - (this.y + this.h / 2);
-        if (Math.abs(ox) < (player.w + this.w) / 2 &&
-            Math.abs(oy) < (player.h + this.h) / 2) {
-            if (player.isAttacking) {
-                this.alive = false;
-                spawnShards(this.x + 16, this.y + 16, 22, '#cc44ff');
-                triggerShake(8, 14);
-                score += 100;
-            } else { die(); }
-        }
-    }
-    draw() {
-        if (!this.alive) return;
-        this.pulse += 0.08;
-        const ex = Math.round(this.x - camX);
-        const ey = Math.round(this.y - camY);
-        ctx.save();
-        ctx.shadowColor = '#cc44ff';
-        ctx.shadowBlur  = 10 + 8 * Math.sin(this.pulse);
-        const g = ctx.createLinearGradient(ex, ey, ex + this.w, ey + this.h);
-        g.addColorStop(0, '#9933cc'); g.addColorStop(1, '#551188');
-        ctx.fillStyle = g;
-        ctx.fillRect(ex, ey, this.w, this.h);
-        ctx.fillStyle = '#ff2200'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 10;
-        ctx.fillRect(ex + 6, ey + 10, 20, 6);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.font      = '8px monospace';
-        ctx.fillText('BUG', ex + 8, ey + 28);
-        ctx.restore();
-    }
+function winBattle(){
+    enableButtons(false);
+    setBattleMsg("✅ <b>BUG.exe</b> was squashed! <b>120 XP</b> gained!");
+    document.getElementById('xp-bar').style.width='78%';
+    showBanner('#00ff88','VICTORY!','BUG.exe squashed  |  Returning to OVERWORLD...');
+    setTimeout(exitBattle,2600);
 }
-let enemies = [new Enemy(300, 352), new Enemy(500, 256)];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE 6 · INTEGRATOR — Game Loop & Logic
-// ─────────────────────────────────────────────────────────────────────────────
-let player = new PhysicsBody(50, 250, 30, 48, '#FFFFFF');
-
-function die() {
-    if (gameState !== "PLAY") return;
-    gameState = "GAMEOVER";
-    triggerShake(14, 22);
-    spawnShards(player.x + player.w / 2, player.y + player.h / 2, 30, '#ff4444');
-    document.getElementById('statusText').innerText   = "FATAL ERROR. Press 'R' to Re-compile.";
-    document.getElementById('statusText').style.color = "red";
+function loseBattle(){
+    enableButtons(false);
+    setBattleMsg("💀 <b>SYSTEM CRASH!</b> You have been deleted.");
+    playerHP=playerMaxHP;
+    showBanner('#ff2244','GAME OVER','Rebooting from last save...');
+    setTimeout(exitBattle,2800);
 }
-function win() {
-    if (gameState !== "PLAY") return;
-    gameState = "GAMEOVER";
-    triggerShake(5, 15);
-    spawnShards(player.x + player.w / 2, player.y, 40, '#00ff88');
-    document.getElementById('statusText').innerText   = "COMPILATION SUCCESSFUL! (You Won)";
-    document.getElementById('statusText').style.color = "#00ff88";
+function showBanner(color,title,sub){
+    const b=document.getElementById('result-banner');
+    b.querySelector('#result-title').style.color=color;
+    b.querySelector('#result-title').textContent=title;
+    b.querySelector('#result-sub').textContent=sub;
+    b.classList.add('show');
 }
-function resetGame() {
-    player.x = 50; player.y = 250; player.vx = 0; player.vy = 0; player.grounded = false;
-    camX = 0; camY = 0; shakeTimer = 0;
-    particles.length = 0; ghostTrail.length = 0;
-    enemies = [new Enemy(300, 352), new Enemy(500, 256)];
-    gameState = "PLAY";
-    document.getElementById('statusText').innerText   = "STATUS: RUNNING...";
-    document.getElementById('statusText').style.color = "#dcdcdc";
+function exitBattle(){
+    document.getElementById('result-banner').classList.remove('show');
+    const bl=document.getElementById('battle-layer');
+    bl.classList.remove('visible');
+    setTimeout(()=>{
+        bl.style.display='none';
+        bugGroup.visible=false; bugLight.intensity=0;
+        gameState='OVERWORLD';
+        const ul=document.getElementById('ui-layer');
+        ul.style.opacity='1'; ul.style.pointerEvents='auto';
+        camera.position.set(playerGroup.position.x,10,playerGroup.position.z+12);
+        setOWText("Back in the OVERWORLD. The bugs are restless... <span class='cursor'></span>");
+        document.getElementById('ui-status').textContent=`HP: ${playerHP}/${playerMaxHP} | LVL: 5 | MODE: OVERWORLD`;
+    },500);
 }
 
-// Scanline overlay (baked once into an offscreen canvas)
-const scanCanvas = document.createElement('canvas');
-scanCanvas.width = canvas.width; scanCanvas.height = canvas.height;
-const scanCtx = scanCanvas.getContext('2d');
-for (let y = 0; y < canvas.height; y += 4) {
-    scanCtx.fillStyle = 'rgba(0,0,0,0.10)';
-    scanCtx.fillRect(0, y, canvas.width, 2);
+function setBattleMsg(h){document.getElementById('battle-msg').innerHTML=h+'<span class="msg-cursor"></span>';}
+function updateHPBars(){
+    const ep=(enemyHP/enemyMaxHP)*100, pp=(playerHP/playerMaxHP)*100;
+    const eb=document.getElementById('enemy-hp-bar');
+    eb.style.width=ep+'%'; eb.className='hp-bar '+(ep>50?'green':ep>25?'yellow':'red');
+    document.getElementById('enemy-hp-cur').textContent=enemyHP;
+    const pb=document.getElementById('player-hp-bar');
+    pb.style.width=pp+'%'; pb.className='hp-bar '+(pp>50?'green':pp>25?'yellow':'red');
+    document.getElementById('player-hp-cur').textContent=playerHP;
+}
+function enableButtons(on){
+    ['btn-debug','btn-heal','btn-docs','btn-run'].forEach(id=>document.getElementById(id).disabled=!on);
+}
+function shakeScreen(){
+    const el=document.getElementById('battle-layer');
+    el.classList.remove('shaking'); void el.offsetWidth; el.classList.add('shaking');
+    setTimeout(()=>el.classList.remove('shaking'),450);
 }
 
-// ── MAIN LOOP ──────────────────────────────────────────────────────────────
-function loop() {
-    // Background
-    ctx.fillStyle = '#14141c';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Layer 0 — far parallax fog (scrolls at ~25% of camera speed)
-    drawCodeFog(0.25);
-
-    if (gameState === "PLAY") {
-        player.update();
-        updateCamera();
-        enemies.forEach(e => e.update());
-        updateParticles();
-    }
-
-    // Layer 1 — world geometry
-    drawLevel();
-
-    // Layer 2 — ghost trail (drawn behind player)
-    drawGhostTrail();
-
-    // Layer 3 — player
-    drawPlayer(player);
-
-    // Layer 4 — enemies
-    enemies.forEach(e => e.draw());
-
-    // Layer 5 — particles (world-space, offset by cam)
-    for (const p of particles) p.draw(camX, camY);
-
-    // Layer 6 — scanlines (screen-space)
-    ctx.drawImage(scanCanvas, 0, 0);
-
-    // Layer 7 — vignette
-    const vig = ctx.createRadialGradient(
-        canvas.width / 2, canvas.height / 2, canvas.height * 0.22,
-        canvas.width / 2, canvas.height / 2, canvas.height * 0.90
-    );
-    vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, 'rgba(0,0,0,0.60)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Game Over overlay
-    if (gameState === "GAMEOVER") {
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        ctx.textAlign   = 'center';
-        ctx.shadowColor = '#ff3333';
-        ctx.shadowBlur  = 30;
-        ctx.fillStyle   = '#ff5555';
-        ctx.font        = 'bold 38px "Courier New"';
-        ctx.fillText('// RUNTIME EXCEPTION', canvas.width / 2, canvas.height / 2 - 24);
-        ctx.font        = '16px "Courier New"';
-        ctx.fillStyle   = '#888';
-        ctx.shadowBlur  = 0;
-        ctx.fillText("Press 'R' to Re-compile", canvas.width / 2, canvas.height / 2 + 18);
-        ctx.restore();
-    }
-
-    // Screen shake (CSS transform on canvas element)
-    applyShake();
-
-    requestAnimationFrame(loop);
-}
-loop();
+addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+});
 </script>
 </body>
 </html>
