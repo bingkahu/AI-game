@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <title>Hollow Script: The Missing Semicolon</title>
     <style>
-        /* --- DEPARTMENT: THE ARTIST (UI & CSS) --- */
         body {
-            background-color: #0f0f12; /* Deep code-editor background */
+            background-color: #0f0f12;
             color: #dcdcdc;
-            font-family: 'Courier New', Courier, monospace; /* Monospace for code theme */
+            font-family: 'Courier New', Courier, monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -17,72 +16,65 @@
             margin: 0;
             overflow: hidden;
         }
-        canvas {
+        /* Wrapper clips canvas shake so it never overflows the border */
+        #canvas-wrapper {
+            position: relative;
+            width: 800px;
+            height: 480px;
             border: 4px solid #444;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
-            image-rendering: pixelated; /* Retro feel */
-            background-color: #1e1e1e;
+            box-shadow: 0 0 30px rgba(0,255,100,0.22), 0 0 70px rgba(0,255,100,0.07);
+            overflow: hidden;
+            background-color: #14141c;
         }
-        #ui-layer {
-            margin-top: 10px;
-            text-align: center;
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            image-rendering: pixelated;
         }
-        .controls { font-size: 0.8em; color: #666; }
-        .hud { font-size: 1.2em; color: #ff5555; font-weight: bold; }
+        #ui-layer { margin-top: 12px; text-align: center; }
+        .controls { font-size: 0.8em; color: #555; letter-spacing: 0.05em; }
+        .hud { font-size: 1.1em; color: #ff5555; font-weight: bold; letter-spacing: 0.1em; }
     </style>
 </head>
 <body>
 
+<div id="canvas-wrapper">
     <canvas id="gameCanvas" width="800" height="480"></canvas>
-    
-    <div id="ui-layer">
-        <div class="hud" id="statusText">STATUS: RUNNING...</div>
-        <div class="controls">ARROWS: Move | Z/SPACE: Jump | X: Debug (Attack)</div>
-    </div>
+</div>
+<div id="ui-layer">
+    <div class="hud" id="statusText">STATUS: RUNNING...</div>
+    <div class="controls">ARROWS: Move &nbsp;|&nbsp; Z / SPACE: Jump &nbsp;|&nbsp; X: Debug (Attack)</div>
+</div>
 
 <script>
-/**
- * ------------------------------------------------------------------
- * AI MODULE 1: THE ARCHITECT (Global Config & State)
- * ------------------------------------------------------------------
- */
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 1 · ARCHITECT — Global Config & State
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('gameCanvas');
+const ctx     = canvas.getContext('2d');
 const BLOCK_SIZE = 32;
 
-// Input State
-const keys = {
-    right: false,
-    left: false,
-    up: false,
-    attack: false
-};
-
-// Game State
-let gameState = "PLAY"; // PLAY, GAMEOVER
+const keys = { right: false, left: false, up: false, attack: false };
+let gameState = "PLAY";
 let score = 0;
 
 document.addEventListener('keydown', (e) => {
     if (e.code === 'ArrowRight') keys.right = true;
-    if (e.code === 'ArrowLeft') keys.left = true;
+    if (e.code === 'ArrowLeft')  keys.left  = true;
     if (e.code === 'Space' || e.code === 'KeyZ') keys.up = true;
     if (e.code === 'KeyX') keys.attack = true;
     if (gameState === "GAMEOVER" && e.code === 'KeyR') resetGame();
 });
-
 document.addEventListener('keyup', (e) => {
     if (e.code === 'ArrowRight') keys.right = false;
-    if (e.code === 'ArrowLeft') keys.left = false;
+    if (e.code === 'ArrowLeft')  keys.left  = false;
     if (e.code === 'Space' || e.code === 'KeyZ') keys.up = false;
     if (e.code === 'KeyX') keys.attack = false;
 });
 
-/**
- * ------------------------------------------------------------------
- * AI MODULE 2: THE LEVEL DESIGNER (Map Data)
- * Legend: 0=Empty, 1=Wall, 2=Spike(Bug), 3=Exit(Bracket)
- * ------------------------------------------------------------------
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 2 · LEVEL DESIGNER — Map Data (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
 const mapLayout = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -100,262 +92,556 @@ const mapLayout = [
     [1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
+const MAP_COLS = mapLayout[0].length;
+const MAP_ROWS = mapLayout.length;
+const FULL_W   = MAP_COLS * BLOCK_SIZE; // 800
+const FULL_H   = MAP_ROWS * BLOCK_SIZE; // 480
 
-// Helper to get tiles
 function getTile(col, row) {
-    if (row < 0 || row >= mapLayout.length || col < 0 || col >= mapLayout[0].length) return 1;
+    if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return 1;
     return mapLayout[row][col];
 }
 
-/**
- * ------------------------------------------------------------------
- * AI MODULE 3: THE PHYSICIST (Physics Engine)
- * ------------------------------------------------------------------
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// VFX A · PARTICLE SYSTEM — Syntax Shards
+// ─────────────────────────────────────────────────────────────────────────────
+const SHARD_SYMBOLS = ['{', '}', ';', '()', '=', '*', '&', '//', '!=', '=>', '[]', '?', '++'];
+const particles = [];
+
+class Particle {
+    constructor(x, y, color) {
+        this.x      = x;
+        this.y      = y;
+        this.symbol = SHARD_SYMBOLS[Math.floor(Math.random() * SHARD_SYMBOLS.length)];
+        const angle = Math.random() * Math.PI * 2;
+        const spd   = 1.5 + Math.random() * 4.5;
+        this.vx     = Math.cos(angle) * spd;
+        this.vy     = Math.sin(angle) * spd - 2.2; // upward bias
+        this.life   = 1.0;
+        this.decay  = 0.020 + Math.random() * 0.035;
+        this.size   = 9 + Math.random() * 8;
+        this.color  = color;
+        this.rot    = Math.random() * Math.PI * 2;
+        this.rotSpd = (Math.random() - 0.5) * 0.20;
+    }
+    update() {
+        this.vy  += 0.15;   // gravity
+        this.x   += this.vx;
+        this.y   += this.vy;
+        this.vx  *= 0.96;
+        this.rot += this.rotSpd;
+        this.life -= this.decay;
+    }
+    draw(offX, offY) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle   = this.color;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur  = 10;
+        ctx.font        = `bold ${this.size}px 'Courier New', monospace`;
+        ctx.translate(this.x - offX, this.y - offY);
+        ctx.rotate(this.rot);
+        ctx.fillText(this.symbol, 0, 0);
+        ctx.restore();
+    }
+}
+
+function spawnShards(x, y, count, color) {
+    for (let i = 0; i < count; i++) particles.push(new Particle(x, y, color));
+}
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VFX B · SCREEN SHAKE
+// ─────────────────────────────────────────────────────────────────────────────
+let shakeTimer = 0, shakeIntensity = 0;
+
+function triggerShake(intensity, duration) {
+    shakeIntensity = intensity;
+    shakeTimer     = duration;
+}
+function applyShake() {
+    if (shakeTimer > 0) {
+        const dx = (Math.random() - 0.5) * 2 * shakeIntensity;
+        const dy = (Math.random() - 0.5) * 2 * shakeIntensity;
+        canvas.style.transform = `translate(${dx}px, ${dy}px)`;
+        shakeIntensity *= 0.84;
+        shakeTimer--;
+    } else {
+        canvas.style.transform = 'translate(0,0)';
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VFX C · SMOOTH CAMERA — lerp viewport follows player
+// ─────────────────────────────────────────────────────────────────────────────
+let camX = 0, camY = 0;
+const CAM_LERP = 0.10;
+
+function updateCamera() {
+    const tx = player.x + player.w / 2 - canvas.width  / 2;
+    const ty = player.y + player.h / 2 - canvas.height / 2;
+    const cx = Math.max(0, Math.min(tx, FULL_W - canvas.width));
+    const cy = Math.max(0, Math.min(ty, FULL_H - canvas.height));
+    camX += (cx - camX) * CAM_LERP;
+    camY += (cy - camY) * CAM_LERP;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VFX D · CODE FOG — Parallax scrolling background text
+// ─────────────────────────────────────────────────────────────────────────────
+const CODE_LINES = [
+    'function debug(error) {', '  if (!error) return null;',
+    '  throw new SyntaxError();', '}', 'const soul = undefined;',
+    'while (alive) { run(); }', 'import { hope } from "void";',
+    'let semicolon = missing;', '// TODO: fix everything',
+    'export default darkness;', 'class Knight extends Error {',
+    '  constructor() { super(); }', '}', 'try { exist(); }',
+    'catch(e) { respawn(e); }', 'const PATH = "./hollow";',
+    '=> NullPointerException', 'git commit -m "it works"',
+    'npm run despair', '/* here be bugs */', 'if (0 === "0") { panic(); }',
+    'delete this.sanity;', 'Object.freeze(time);',
+    'Array(Infinity).fill(void 0);', 'return undefined;',
+    'this.hp = NaN;', '// edge case: death', 'resolve(nothing);',
+];
+const fogColumns = [];
+(function initFog() {
+    for (let col = 0; col < 12; col++) {
+        let y = -(Math.random() * 500);
+        const lines = [];
+        for (let i = 0; i < 32; i++) {
+            lines.push({ text: CODE_LINES[Math.floor(Math.random() * CODE_LINES.length)], y });
+            y += 20;
+        }
+        fogColumns.push({
+            x:     col * 75 - 10,
+            speed: 0.12 + Math.random() * 0.12,
+            alpha: 0.033 + Math.random() * 0.042,
+            lines
+        });
+    }
+})();
+
+function drawCodeFog(parallaxFactor) {
+    ctx.save();
+    ctx.font = '10px "Courier New", monospace';
+    for (const col of fogColumns) {
+        ctx.fillStyle = `rgba(60,220,120,${col.alpha})`;
+        const drawX   = col.x - camX * parallaxFactor;
+        for (const line of col.lines) {
+            line.y += col.speed;
+            if (line.y > canvas.height + 30) {
+                line.y    = -25;
+                line.text = CODE_LINES[Math.floor(Math.random() * CODE_LINES.length)];
+            }
+            ctx.fillText(line.text, drawX, line.y);
+        }
+    }
+    ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 3 · PHYSICIST — Physics Engine (original logic preserved)
+// ─────────────────────────────────────────────────────────────────────────────
+const ghostTrail = [];
+
 class PhysicsBody {
     constructor(x, y, w, h, color) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-        this.vx = 0;
-        this.vy = 0;
-        this.color = color;
-        this.speed = 5;
-        this.jumpForce = -12;
-        this.gravity = 0.6;
-        this.grounded = false;
-        this.isAttacking = false;
-        this.attackTimer = 0;
-        this.facingRight = true;
+        this.x = x; this.y = y; this.w = w; this.h = h;
+        this.vx = 0; this.vy = 0; this.color = color;
+        this.speed = 5; this.jumpForce = -12; this.gravity = 0.6;
+        this.grounded = false; this.wasGrounded = false; this.justLanded = false;
+        this.isAttacking = false; this.attackTimer = 0; this.facingRight = true;
     }
 
     update() {
-        // Apply Gravity
+        this.wasGrounded = this.grounded;
         this.vy += this.gravity;
-        
-        // Horizontal Movement
-        if (this === player) {
-            if (keys.right) { this.vx = this.speed; this.facingRight = true; }
-            else if (keys.left) { this.vx = -this.speed; this.facingRight = false; }
-            else { this.vx = 0; }
 
-            // Jump
+        if (this === player) {
+            if (keys.right) { this.vx = this.speed;  this.facingRight = true; }
+            else if (keys.left) { this.vx = -this.speed; this.facingRight = false; }
+            else this.vx = 0;
+
             if (keys.up && this.grounded) {
                 this.vy = this.jumpForce;
                 this.grounded = false;
+                spawnShards(this.x + this.w / 2, this.y + this.h, 5, '#88ffcc');
             }
 
-            // Attack Logic
             if (keys.attack && !this.isAttacking) {
                 this.isAttacking = true;
-                this.attackTimer = 10; // Frames of attack
+                this.attackTimer = 10;
+                const sx = this.facingRight ? this.x + this.w + 10 : this.x - 10;
+                spawnShards(sx, this.y + this.h / 2, 14, '#ffffff');
             }
-            if (this.isAttacking) {
-                this.attackTimer--;
-                if (this.attackTimer <= 0) this.isAttacking = false;
-            }
+            if (this.isAttacking) { this.attackTimer--; if (this.attackTimer <= 0) this.isAttacking = false; }
         }
 
-        // Apply Velocity
+        // Ghost trail — only when moving fast
+        const spd = Math.abs(this.vx) + Math.abs(this.vy);
+        if (this === player && spd > 5) {
+            ghostTrail.push({ x: this.x, y: this.y, w: this.w, h: this.h, age: 0 });
+            if (ghostTrail.length > 10) ghostTrail.shift();
+        }
+
         this.x += this.vx;
         this.checkCollision('x');
         this.y += this.vy;
         this.checkCollision('y');
-        
-        // Bounds
-        if (this.y > canvas.height) die();
+
+        this.justLanded = !this.wasGrounded && this.grounded;
+        if (this.justLanded && this === player) {
+            spawnShards(this.x + this.w / 2, this.y + this.h, 7, '#aaaaff');
+            if (Math.abs(this.vy) > 0) triggerShake(2, 4); // soft land shake
+        }
+
+        if (this.y > FULL_H + 100) die();
     }
 
     checkCollision(axis) {
-        // Simple AABB vs Tile Grid
-        let left = Math.floor(this.x / BLOCK_SIZE);
-        let right = Math.floor((this.x + this.w - 0.1) / BLOCK_SIZE);
-        let top = Math.floor(this.y / BLOCK_SIZE);
+        let left   = Math.floor(this.x / BLOCK_SIZE);
+        let right  = Math.floor((this.x + this.w - 0.1) / BLOCK_SIZE);
+        let top    = Math.floor(this.y / BLOCK_SIZE);
         let bottom = Math.floor((this.y + this.h - 0.1) / BLOCK_SIZE);
 
         for (let r = top; r <= bottom; r++) {
             for (let c = left; c <= right; c++) {
-                let tile = getTile(c, r);
-                if (tile === 1) { // Solid Wall
+                const tile = getTile(c, r);
+                if (tile === 1) {
                     if (axis === 'x') {
-                        if (this.vx > 0) this.x = c * BLOCK_SIZE - this.w;
-                        if (this.vx < 0) this.x = (c + 1) * BLOCK_SIZE;
+                        if (this.vx > 0) {
+                            this.x = c * BLOCK_SIZE - this.w;
+                            if (this === player) spawnShards(this.x + this.w, this.y + this.h / 2, 5, '#ff9955');
+                        }
+                        if (this.vx < 0) {
+                            this.x = (c + 1) * BLOCK_SIZE;
+                            if (this === player) spawnShards(this.x, this.y + this.h / 2, 5, '#ff9955');
+                        }
                         this.vx = 0;
                     } else {
-                        if (this.vy > 0) { // Landing
-                            this.y = r * BLOCK_SIZE - this.h;
-                            this.grounded = true;
-                        }
+                        if (this.vy > 0) { this.y = r * BLOCK_SIZE - this.h; this.grounded = true; }
                         if (this.vy < 0) this.y = (r + 1) * BLOCK_SIZE;
                         this.vy = 0;
                     }
-                } else if (tile === 2) { // Spikes
-                    if (this === player) die();
-                } else if (tile === 3) { // Win
-                    if (this === player) win();
-                }
+                } else if (tile === 2 && this === player) { die(); }
+                  else if (tile === 3 && this === player) { win(); }
             }
         }
     }
 }
 
-/**
- * ------------------------------------------------------------------
- * AI MODULE 4: THE ARTIST (Rendering)
- * ------------------------------------------------------------------
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 4 · ARTIST — Upgraded rendering
+// ─────────────────────────────────────────────────────────────────────────────
 function drawLevel() {
-    for (let r = 0; r < mapLayout.length; r++) {
-        for (let c = 0; c < mapLayout[0].length; c++) {
-            let tile = mapLayout[r][c];
+    for (let r = 0; r < MAP_ROWS; r++) {
+        for (let c = 0; c < MAP_COLS; c++) {
+            const tile = mapLayout[r][c];
+            const wx   = Math.round(c * BLOCK_SIZE - camX);
+            const wy   = Math.round(r * BLOCK_SIZE - camY);
+            if (wx > canvas.width  + BLOCK_SIZE || wx < -BLOCK_SIZE) continue;
+            if (wy > canvas.height + BLOCK_SIZE || wy < -BLOCK_SIZE) continue;
+
             if (tile === 1) {
-                // Draw Wall
-                ctx.fillStyle = '#444'; 
-                ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-                // Highlight
-                ctx.strokeStyle = '#222';
-                ctx.strokeRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                const g = ctx.createLinearGradient(wx, wy, wx + BLOCK_SIZE, wy + BLOCK_SIZE);
+                g.addColorStop(0, '#484858');
+                g.addColorStop(1, '#282832');
+                ctx.fillStyle = g;
+                ctx.fillRect(wx, wy, BLOCK_SIZE, BLOCK_SIZE);
+                ctx.fillStyle = 'rgba(255,255,255,0.07)';   // top highlight
+                ctx.fillRect(wx, wy, BLOCK_SIZE, 2);
+                ctx.strokeStyle = '#111116';
+                ctx.lineWidth   = 1;
+                ctx.strokeRect(wx, wy, BLOCK_SIZE, BLOCK_SIZE);
+                ctx.fillStyle = 'rgba(0,255,100,0.022)';    // green tint line
+                ctx.fillRect(wx, wy, BLOCK_SIZE, 1);
             } else if (tile === 2) {
-                // Draw Spike/Bug
-                ctx.fillStyle = '#ff0000';
+                ctx.fillStyle   = '#cc1111';
+                ctx.shadowColor = '#ff2222';
+                ctx.shadowBlur  = 14;
                 ctx.beginPath();
-                ctx.moveTo(c * BLOCK_SIZE, (r+1) * BLOCK_SIZE);
-                ctx.lineTo(c * BLOCK_SIZE + 16, r * BLOCK_SIZE);
-                ctx.lineTo((c+1) * BLOCK_SIZE, (r+1) * BLOCK_SIZE);
+                ctx.moveTo(wx,              wy + BLOCK_SIZE);
+                ctx.lineTo(wx + 16,         wy);
+                ctx.lineTo(wx + BLOCK_SIZE, wy + BLOCK_SIZE);
                 ctx.fill();
+                ctx.shadowBlur = 0;
             } else if (tile === 3) {
-                // Exit
-                ctx.fillStyle = '#00ff00';
-                ctx.font = '20px monospace';
-                ctx.fillText('};', c * BLOCK_SIZE + 5, r * BLOCK_SIZE + 20);
+                const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 300);
+                ctx.shadowColor = `rgba(0,255,100,${pulse})`;
+                ctx.shadowBlur  = 26 * pulse;
+                ctx.fillStyle   = `rgba(0,255,100,${0.7 + 0.3 * pulse})`;
+                ctx.font        = 'bold 26px monospace';
+                ctx.fillText('};', wx + 2, wy + 26);
+                ctx.shadowBlur  = 0;
             }
         }
+    }
+}
+
+function drawGhostTrail() {
+    for (let i = ghostTrail.length - 1; i >= 0; i--) {
+        const g      = ghostTrail[i];
+        g.age++;
+        const frac   = i / ghostTrail.length;
+        const shrink = (1 - frac) * 6;
+        ctx.save();
+        ctx.globalAlpha = frac * 0.30;
+        ctx.fillStyle   = '#6699ff';
+        ctx.shadowColor = '#6699ff';
+        ctx.shadowBlur  = 14;
+        ctx.fillRect(
+            Math.round(g.x - camX + shrink / 2),
+            Math.round(g.y - camY + shrink / 2),
+            g.w - shrink, g.h - shrink
+        );
+        ctx.restore();
+        if (g.age > 8) ghostTrail.splice(i, 1);
     }
 }
 
 function drawPlayer(p) {
-    // Body (The Syntax Error)
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x, p.y, p.w, p.h);
-    
-    // Eyes (Hollow style)
-    ctx.fillStyle = '#000';
-    if(p.facingRight) {
-        ctx.fillRect(p.x + 18, p.y + 8, 6, 12);
-        ctx.fillRect(p.x + 22, p.y + 8, 4, 12); 
-    } else {
-        ctx.fillRect(p.x + 6, p.y + 8, 6, 12);
-        ctx.fillRect(p.x + 2, p.y + 8, 4, 12);
+    const px = Math.round(p.x - camX);
+    const py = Math.round(p.y - camY);
+
+    // ── Squash & stretch based on vertical velocity
+    let scaleX = 1, scaleY = 1;
+    if (!p.grounded) {
+        if (p.vy < -3)     { scaleY = 1.22; scaleX = 0.80; }  // rising: tall & thin
+        else if (p.vy > 3) { scaleY = 0.84; scaleX = 1.16; }  // falling: wide & short
+    } else if (p.justLanded) {
+        scaleY = 0.68; scaleX = 1.32;                          // landing squash
     }
 
-    // Sword (The Semicolon)
-    if (p.isAttacking) {
-        ctx.fillStyle = '#FFF';
-        let swordX = p.facingRight ? p.x + p.w : p.x - 40;
-        ctx.fillRect(swordX, p.y + 20, 40, 5); // Slash
+    const drawW = p.w * scaleX;
+    const drawH = p.h * scaleY;
+    const drawX = px + (p.w - drawW) / 2;
+    const drawY = py + (p.h - drawH);      // anchor to feet
+
+    ctx.save();
+
+    // Outer body glow
+    ctx.shadowColor = p.isAttacking ? '#ffffff' : '#88bbff';
+    ctx.shadowBlur  = p.isAttacking ? 32 : 14;
+
+    // Body gradient
+    const bg = ctx.createLinearGradient(drawX, drawY, drawX + drawW, drawY + drawH);
+    bg.addColorStop(0,   '#ddeeff');
+    bg.addColorStop(0.5, '#aabbdd');
+    bg.addColorStop(1,   '#7788aa');
+    ctx.fillStyle = bg;
+    ctx.fillRect(drawX, drawY, drawW, drawH);
+
+    // Hollow inner void
+    ctx.shadowBlur = 0;
+    ctx.fillStyle  = 'rgba(8,8,18,0.55)';
+    ctx.fillRect(drawX + drawW * 0.2, drawY + drawH * 0.2, drawW * 0.6, drawH * 0.45);
+
+    // Eye sockets
+    ctx.fillStyle = '#000010';
+    const eyeY   = drawY + drawH * 0.17;
+    const eyeH   = drawH * 0.24;
+    const eyeW   = drawW * 0.16;
+    if (p.facingRight) {
+        ctx.fillRect(drawX + drawW * 0.54, eyeY, eyeW,        eyeH);
+        ctx.fillRect(drawX + drawW * 0.72, eyeY, eyeW * 0.65, eyeH);
+    } else {
+        ctx.fillRect(drawX + drawW * 0.26, eyeY, eyeW,        eyeH);
+        ctx.fillRect(drawX + drawW * 0.10, eyeY, eyeW * 0.65, eyeH);
     }
+    // White glint
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    if (p.facingRight) ctx.fillRect(drawX + drawW * 0.56, eyeY + 2, 3, 3);
+    else               ctx.fillRect(drawX + drawW * 0.28, eyeY + 2, 3, 3);
+
+    // Attack — the Semicolon strike
+    if (p.isAttacking) {
+        const progress = 1 - (p.attackTimer / 10);
+        ctx.save();
+        ctx.globalAlpha = 1 - progress * 0.7;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth   = 4;
+        ctx.shadowColor = '#aaffff';
+        ctx.shadowBlur  = 24;
+        const sx  = p.facingRight ? drawX + drawW + 2 : drawX - 42;
+        const dir = p.facingRight ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(sx, drawY + drawH * 0.30);
+        ctx.lineTo(sx + dir * 38, drawY + drawH * 0.30);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(sx + dir * 8, drawY + drawH * 0.52, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.restore();
+    }
+    ctx.restore();
 }
 
-/**
- * ------------------------------------------------------------------
- * AI MODULE 5: THE COMBAT DESIGNER (Enemies)
- * ------------------------------------------------------------------
- */
-// Simple logic: Enemies are handled as static hazards (Spikes) in this version
-// for stability, but we add a "Ghost" patrol logic here.
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 5 · COMBAT DESIGNER — Enemies
+// ─────────────────────────────────────────────────────────────────────────────
 class Enemy {
     constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.w = 32;
-        this.h = 32;
-        this.speed = 2;
-        this.dir = 1;
-        this.distMoved = 0;
-        this.limit = 100;
+        this.x = x; this.y = y; this.w = 32; this.h = 32;
+        this.speed = 2; this.dir = 1; this.distMoved = 0; this.limit = 100;
+        this.alive = true; this.pulse = Math.random() * Math.PI * 2;
     }
     update() {
+        if (!this.alive) return;
         this.x += this.speed * this.dir;
         this.distMoved += this.speed;
-        if (this.distMoved > this.limit || this.distMoved < 0) {
-            this.dir *= -1;
-        }
-        
-        // Simple collision with player
-        if (this.x < player.x + player.w &&
-            this.x + this.w > player.x &&
-            this.y < player.y + player.h &&
-            this.y + this.h > player.y) {
-                // If player is attacking, kill enemy
-                if (player.isAttacking) {
-                    this.x = -1000; // Remove enemy
-                } else {
-                    die();
-                }
+        if (this.distMoved > this.limit) { this.dir *= -1; this.distMoved = 0; }
+
+        const ox = player.x + player.w / 2 - (this.x + this.w / 2);
+        const oy = player.y + player.h / 2 - (this.y + this.h / 2);
+        if (Math.abs(ox) < (player.w + this.w) / 2 &&
+            Math.abs(oy) < (player.h + this.h) / 2) {
+            if (player.isAttacking) {
+                this.alive = false;
+                spawnShards(this.x + 16, this.y + 16, 22, '#cc44ff');
+                triggerShake(8, 14);
+                score += 100;
+            } else { die(); }
         }
     }
     draw() {
-        if (this.x < 0) return;
-        ctx.fillStyle = 'purple';
-        ctx.fillRect(this.x, this.y, this.w, this.h);
-        ctx.fillStyle = 'white';
-        ctx.font = '12px monospace';
-        ctx.fillText("BUG", this.x+5, this.y+20);
+        if (!this.alive) return;
+        this.pulse += 0.08;
+        const ex = Math.round(this.x - camX);
+        const ey = Math.round(this.y - camY);
+        ctx.save();
+        ctx.shadowColor = '#cc44ff';
+        ctx.shadowBlur  = 10 + 8 * Math.sin(this.pulse);
+        const g = ctx.createLinearGradient(ex, ey, ex + this.w, ey + this.h);
+        g.addColorStop(0, '#9933cc'); g.addColorStop(1, '#551188');
+        ctx.fillStyle = g;
+        ctx.fillRect(ex, ey, this.w, this.h);
+        ctx.fillStyle = '#ff2200'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 10;
+        ctx.fillRect(ex + 6, ey + 10, 20, 6);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.font      = '8px monospace';
+        ctx.fillText('BUG', ex + 8, ey + 28);
+        ctx.restore();
     }
 }
 let enemies = [new Enemy(300, 352), new Enemy(500, 256)];
 
-/**
- * ------------------------------------------------------------------
- * AI MODULE 6: THE WRITER & INTEGRATOR (Game Loop & Logic)
- * ------------------------------------------------------------------
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 6 · INTEGRATOR — Game Loop & Logic
+// ─────────────────────────────────────────────────────────────────────────────
 let player = new PhysicsBody(50, 250, 30, 48, '#FFFFFF');
 
 function die() {
+    if (gameState !== "PLAY") return;
     gameState = "GAMEOVER";
-    document.getElementById('statusText').innerText = "FATAL ERROR. Press 'R' to Re-compile.";
+    triggerShake(14, 22);
+    spawnShards(player.x + player.w / 2, player.y + player.h / 2, 30, '#ff4444');
+    document.getElementById('statusText').innerText   = "FATAL ERROR. Press 'R' to Re-compile.";
     document.getElementById('statusText').style.color = "red";
 }
-
 function win() {
+    if (gameState !== "PLAY") return;
     gameState = "GAMEOVER";
-    document.getElementById('statusText').innerText = "COMPILATION SUCCESSFUL! (You Won)";
-    document.getElementById('statusText').style.color = "#00ff00";
+    triggerShake(5, 15);
+    spawnShards(player.x + player.w / 2, player.y, 40, '#00ff88');
+    document.getElementById('statusText').innerText   = "COMPILATION SUCCESSFUL! (You Won)";
+    document.getElementById('statusText').style.color = "#00ff88";
 }
-
 function resetGame() {
-    player.x = 50;
-    player.y = 250;
-    player.vx = 0;
-    player.vy = 0;
-    enemies = [new Enemy(300, 352), new Enemy(500, 256)]; // Reset enemies
+    player.x = 50; player.y = 250; player.vx = 0; player.vy = 0; player.grounded = false;
+    camX = 0; camY = 0; shakeTimer = 0;
+    particles.length = 0; ghostTrail.length = 0;
+    enemies = [new Enemy(300, 352), new Enemy(500, 256)];
     gameState = "PLAY";
-    document.getElementById('statusText').innerText = "STATUS: RUNNING...";
-    document.getElementById('statusText').style.color = "white";
+    document.getElementById('statusText').innerText   = "STATUS: RUNNING...";
+    document.getElementById('statusText').style.color = "#dcdcdc";
 }
 
+// Scanline overlay (baked once into an offscreen canvas)
+const scanCanvas = document.createElement('canvas');
+scanCanvas.width = canvas.width; scanCanvas.height = canvas.height;
+const scanCtx = scanCanvas.getContext('2d');
+for (let y = 0; y < canvas.height; y += 4) {
+    scanCtx.fillStyle = 'rgba(0,0,0,0.10)';
+    scanCtx.fillRect(0, y, canvas.width, 2);
+}
+
+// ── MAIN LOOP ──────────────────────────────────────────────────────────────
 function loop() {
-    // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Background
+    ctx.fillStyle = '#14141c';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Layer 0 — far parallax fog (scrolls at ~25% of camera speed)
+    drawCodeFog(0.25);
 
     if (gameState === "PLAY") {
         player.update();
+        updateCamera();
         enemies.forEach(e => e.update());
+        updateParticles();
     }
 
-    // Draw
+    // Layer 1 — world geometry
     drawLevel();
+
+    // Layer 2 — ghost trail (drawn behind player)
+    drawGhostTrail();
+
+    // Layer 3 — player
     drawPlayer(player);
+
+    // Layer 4 — enemies
     enemies.forEach(e => e.draw());
+
+    // Layer 5 — particles (world-space, offset by cam)
+    for (const p of particles) p.draw(camX, camY);
+
+    // Layer 6 — scanlines (screen-space)
+    ctx.drawImage(scanCanvas, 0, 0);
+
+    // Layer 7 — vignette
+    const vig = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.height * 0.22,
+        canvas.width / 2, canvas.height / 2, canvas.height * 0.90
+    );
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.60)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Game Over overlay
+    if (gameState === "GAMEOVER") {
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.textAlign   = 'center';
+        ctx.shadowColor = '#ff3333';
+        ctx.shadowBlur  = 30;
+        ctx.fillStyle   = '#ff5555';
+        ctx.font        = 'bold 38px "Courier New"';
+        ctx.fillText('// RUNTIME EXCEPTION', canvas.width / 2, canvas.height / 2 - 24);
+        ctx.font        = '16px "Courier New"';
+        ctx.fillStyle   = '#888';
+        ctx.shadowBlur  = 0;
+        ctx.fillText("Press 'R' to Re-compile", canvas.width / 2, canvas.height / 2 + 18);
+        ctx.restore();
+    }
+
+    // Screen shake (CSS transform on canvas element)
+    applyShake();
 
     requestAnimationFrame(loop);
 }
-
-// Start
 loop();
-
 </script>
 </body>
 </html>
