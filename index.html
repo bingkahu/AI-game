@@ -1,653 +1,1737 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>CodeMon 3D: Syntax Version</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Courier New', monospace; }
+<meta charset="UTF-8">
+<title>CodeMon: The Kernel Uprising</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{overflow:hidden;background:#0a0a1a;font-family:'Courier New',monospace}
 
-        #flash-overlay {
-            position: fixed; inset: 0; background: white;
-            opacity: 0; pointer-events: none; z-index: 100;
-        }
+/* ── HUD ── */
+#hud{
+  position:fixed;top:16px;left:16px;z-index:50;
+  width:220px;pointer-events:none;
+}
+.hud-panel{
+  background:rgba(0,0,0,0.82);border:1px solid rgba(0,255,204,0.35);
+  border-radius:10px;padding:12px 14px;
+  box-shadow:0 0 18px rgba(0,255,204,0.1),inset 0 0 10px rgba(0,0,0,0.5);
+  backdrop-filter:blur(4px);
+}
+.hud-title{
+  font-size:9px;letter-spacing:4px;color:#00ffcc;opacity:0.7;
+  margin-bottom:8px;text-transform:uppercase;
+}
+.hud-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+}
+.hud-label{font-size:10px;color:#888;letter-spacing:2px;text-transform:uppercase}
+.hud-val{font-size:13px;color:#00ffcc;font-weight:bold;letter-spacing:1px}
+.hud-bar-wrap{
+  height:7px;background:#0d0d1a;border-radius:4px;
+  border:1px solid #1a1a3a;overflow:hidden;margin-bottom:6px;
+}
+.hud-bar-fill{
+  height:100%;border-radius:3px;transition:width 0.3s ease;
+  background:linear-gradient(90deg,#00ff88,#00ffcc);position:relative;overflow:hidden;
+}
+.hud-bar-fill::after{
+  content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4),transparent);
+  animation:shimmer 2s infinite;
+}
+.hud-bar-fill.yellow{background:linear-gradient(90deg,#ffcc00,#ff8800)}
+.hud-bar-fill.red{background:linear-gradient(90deg,#ff2244,#ff6600)}
+.hud-xp-fill{background:linear-gradient(90deg,#4488ff,#00ccff)}
 
-        #battle-layer {
-            position: fixed; inset: 0; display: none;
-            flex-direction: column; z-index: 30;
-            opacity: 0; transition: opacity 0.4s ease;
-        }
-        #battle-layer.visible { opacity: 1; }
+.hud-divider{
+  height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,204,0.2),transparent);
+  margin:8px 0;
+}
+.hud-bits{
+  font-size:14px;color:#ffdd00;letter-spacing:1px;text-shadow:0 0 8px rgba(255,221,0,0.5);
+}
+.hud-stats{font-size:10px;color:#666;display:flex;gap:12px}
+.hud-stat-item{color:#888}
+.hud-stat-item span{color:#00ffcc}
 
-        #battle-top {
-            flex: 1; display: flex; align-items: flex-end;
-            justify-content: space-between; padding: 24px 40px 16px;
-            background: linear-gradient(180deg, #c8eaff 0%, #a8d8ff 100%);
-            position: relative; overflow: hidden;
-        }
-        #battle-top::after {
-            content: '';
-            position: absolute; inset: 0;
-            background: repeating-linear-gradient(transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 4px);
-            pointer-events: none;
-        }
+#quest-panel{
+  margin-top:8px;
+  background:rgba(0,0,0,0.82);border:1px solid rgba(255,221,0,0.25);
+  border-radius:10px;padding:10px 14px;
+  box-shadow:0 0 12px rgba(255,221,0,0.05);
+}
+.quest-title{font-size:9px;letter-spacing:4px;color:#ffdd00;opacity:0.7;margin-bottom:6px}
+.quest-text{font-size:11px;color:#aaa;line-height:1.5}
+.quest-progress{
+  height:5px;background:#0d0d1a;border-radius:3px;margin-top:6px;border:1px solid #1a1a3a;overflow:hidden;
+}
+.quest-bar{
+  height:100%;background:linear-gradient(90deg,#ff8800,#ffdd00);
+  border-radius:3px;transition:width 0.5s ease;
+}
 
-        .hp-card {
-            background: #1a1a2e; border: 3px solid #e94560;
-            border-radius: 12px; padding: 10px 16px; min-width: 220px;
-            box-shadow: 0 0 20px rgba(233,69,96,0.4), inset 0 0 10px rgba(0,0,0,0.3); z-index: 2;
-        }
-        .hp-card .mon-name {
-            font-size: 14px; letter-spacing: 3px; color: #e94560;
-            text-transform: uppercase; margin-bottom: 4px; text-shadow: 0 0 8px #e94560;
-        }
-        .hp-card .lv { font-size: 11px; color: #aaa; margin-bottom: 8px; }
-        .hp-bar-wrap { height: 12px; background: #0d0d1a; border-radius: 6px; border: 2px solid #333; overflow: hidden; }
-        .hp-bar { height: 100%; border-radius: 4px; transition: width 0.4s ease; position: relative; overflow: hidden; }
-        .hp-bar::after {
-            content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            animation: shimmer 2s infinite;
-        }
-        @keyframes shimmer { to { left: 200%; } }
-        .hp-bar.green  { background: linear-gradient(90deg, #00ff88, #00cc66); }
-        .hp-bar.yellow { background: linear-gradient(90deg, #ffdd00, #ff9900); }
-        .hp-bar.red    { background: linear-gradient(90deg, #ff2244, #ff6600); }
-        .hp-nums { font-size: 12px; color: #ccc; margin-top: 5px; text-align: right; }
-        .status-badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-top: 4px; letter-spacing: 1px; }
-        .status-bug { background: #6a0dad; color: #e0aaff; border: 1px solid #9d4edd; }
-        .status-ok  { background: #004d26; color: #69ff99; border: 1px solid #00cc66; }
-        .xp-bar-wrap { height: 5px; background: #0d0d1a; border-radius: 3px; margin-top: 6px; border: 1px solid #222; }
-        .xp-bar { height: 100%; background: linear-gradient(90deg, #4488ff, #88ccff); border-radius: 3px; transition: width 0.6s ease; }
-        .type-bug { color: #a8d8a8; }
-        .type-fire { color: #ffaa44; }
-        #enemy-card { align-self: flex-start; }
-        #player-card { align-self: flex-end; }
+#minimap-wrap{
+  position:fixed;bottom:20px;right:20px;z-index:50;
+  pointer-events:none;
+}
+#minimap-label{
+  font-size:8px;letter-spacing:3px;color:#00ffcc;opacity:0.5;
+  text-align:center;margin-bottom:4px;text-transform:uppercase;
+}
+#minimap{
+  width:120px;height:120px;border-radius:8px;
+  border:1px solid rgba(0,255,204,0.3);
+  box-shadow:0 0 14px rgba(0,255,204,0.15);image-rendering:pixelated;
+}
 
-        #battle-ground {
-            height: 60px;
-            background: linear-gradient(180deg, #7ec850 0%, #4a9e20 60%, #3a7e10 100%);
-            border-top: 3px solid #2d6010; position: relative; overflow: hidden;
-        }
-        #battle-ground::before {
-            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 20px;
-            background: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(0,0,0,0.08) 18px, rgba(0,0,0,0.08) 20px);
-        }
+/* ── FLASH ── */
+#flash-overlay{
+  position:fixed;inset:0;background:white;
+  opacity:0;pointer-events:none;z-index:200;
+}
 
-        #battle-bottom { height: 160px; background: #1a1a2e; border-top: 4px solid #e94560; display: flex; position: relative; }
-        #battle-msg-box { flex: 1; padding: 16px 20px; border-right: 3px solid #2d2d4e; display: flex; flex-direction: column; justify-content: space-between; }
-        #battle-msg { font-size: 16px; color: #e0e0ff; line-height: 1.5; min-height: 60px; }
-        .msg-cursor { display: inline-block; width: 8px; height: 16px; background: #e94560; animation: blink 0.7s infinite; vertical-align: bottom; }
-        @keyframes blink { 50% { opacity: 0; } }
-        #battle-mode-label { font-size: 10px; color: #e94560; letter-spacing: 3px; opacity: 0.7; }
+/* ── DIALOGUE ── */
+#dialogue-box{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  width:min(680px,92vw);z-index:80;
+  display:none;animation:slideUp 0.25s ease;
+}
+@keyframes slideUp{from{transform:translateX(-50%) translateY(20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+.dlg-inner{
+  background:#0a0a1a;border:2px solid rgba(0,255,204,0.5);
+  border-radius:14px;padding:18px 22px;
+  box-shadow:0 0 30px rgba(0,255,204,0.2),inset 0 0 20px rgba(0,0,0,0.5);
+}
+.dlg-name{
+  font-size:10px;letter-spacing:4px;color:#00ffcc;margin-bottom:6px;text-transform:uppercase;
+}
+.dlg-text{font-size:15px;color:#e0e0ff;line-height:1.6;min-height:40px}
+.dlg-hint{
+  font-size:9px;color:#444;letter-spacing:2px;margin-top:10px;text-align:right;text-transform:uppercase;
+}
+.dlg-cursor{
+  display:inline-block;width:8px;height:14px;background:#00ffcc;
+  animation:blink 0.7s infinite;vertical-align:bottom;margin-left:2px;
+}
+@keyframes blink{50%{opacity:0}}
 
-        #cmd-grid { width: 260px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; align-content: center; }
-        .cmd-btn {
-            background: #0d0d1a; border: 2px solid #e94560; color: #e0e0ff;
-            font-family: 'Courier New', monospace; font-size: 13px; font-weight: bold;
-            letter-spacing: 1px; padding: 10px 6px; border-radius: 8px; cursor: pointer;
-            text-align: center; transition: all 0.1s ease; text-transform: uppercase;
-            overflow: hidden; box-shadow: 0 0 8px rgba(233,69,96,0.2);
-        }
-        .cmd-btn:hover:not(:disabled) { background: #e94560; color: #fff; box-shadow: 0 0 18px rgba(233,69,96,0.7); transform: scale(1.03); }
-        .cmd-btn:active:not(:disabled) { transform: scale(0.97); }
-        .cmd-btn:disabled { opacity: 0.35; cursor: not-allowed; border-color: #555; }
-        .cmd-btn .btn-type { display: block; font-size: 9px; color: #888; margin-top: 2px; font-weight: normal; }
-        .cmd-btn:hover:not(:disabled) .btn-type { color: rgba(255,255,255,0.7); }
-        #btn-run { border-color: #ff6600; color: #ff9944; }
-        #btn-run:hover:not(:disabled) { background: #ff6600; box-shadow: 0 0 18px rgba(255,102,0,0.7); }
-        #btn-heal { border-color: #00cc88; color: #66ffcc; }
-        #btn-heal:hover:not(:disabled) { background: #00aa66; box-shadow: 0 0 18px rgba(0,204,136,0.7); }
-        #bottom-logo { position: absolute; right: 12px; bottom: 8px; font-size: 9px; color: #333; letter-spacing: 2px; }
+/* ── SHOP ── */
+#shop-overlay{
+  position:fixed;inset:0;z-index:100;
+  background:rgba(0,0,0,0.88);
+  display:none;align-items:center;justify-content:center;
+  animation:fadeIn 0.2s ease;
+}
+#shop-overlay.open{display:flex}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.shop-panel{
+  width:min(560px,94vw);
+  background:#0a0a1a;border:2px solid rgba(255,221,0,0.4);
+  border-radius:18px;overflow:hidden;
+  box-shadow:0 0 60px rgba(255,221,0,0.15);
+}
+.shop-header{
+  background:linear-gradient(90deg,#1a1400,#0a0a00);
+  padding:18px 24px;border-bottom:2px solid rgba(255,221,0,0.2);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.shop-title{font-size:14px;letter-spacing:5px;color:#ffdd00;text-transform:uppercase}
+.shop-bits-display{
+  font-size:13px;color:#ffdd00;
+  background:rgba(255,221,0,0.08);border:1px solid rgba(255,221,0,0.2);
+  padding:4px 12px;border-radius:20px;
+}
+.shop-items{padding:20px;display:flex;flex-direction:column;gap:12px}
+.shop-item{
+  background:#111122;border:1px solid rgba(0,255,204,0.15);
+  border-radius:12px;padding:14px 18px;
+  display:flex;align-items:center;justify-content:space-between;
+  transition:border-color 0.15s,background 0.15s;cursor:pointer;
+}
+.shop-item:hover{
+  border-color:rgba(0,255,204,0.5);background:#0d0d22;
+  box-shadow:0 0 16px rgba(0,255,204,0.08);
+}
+.shop-item-info{}
+.shop-item-name{font-size:13px;color:#00ffcc;letter-spacing:1px;margin-bottom:3px}
+.shop-item-desc{font-size:11px;color:#556;line-height:1.4}
+.shop-item-cost{
+  font-size:14px;color:#ffdd00;font-weight:bold;white-space:nowrap;
+  display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+}
+.shop-buy-btn{
+  font-family:'Courier New',monospace;font-size:11px;font-weight:bold;
+  letter-spacing:2px;padding:6px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid #ffdd00;color:#ffdd00;background:transparent;
+  text-transform:uppercase;transition:all 0.1s;
+}
+.shop-buy-btn:hover{background:#ffdd00;color:#0a0a00}
+.shop-buy-btn:disabled{opacity:0.3;cursor:not-allowed;border-color:#333;color:#333}
+.shop-close{
+  margin:0 20px 18px;display:block;text-align:center;
+  font-size:11px;letter-spacing:3px;color:#444;cursor:pointer;
+  padding:10px;border:1px solid #1a1a2e;border-radius:8px;
+  text-transform:uppercase;transition:color 0.15s,border-color 0.15s;
+}
+.shop-close:hover{color:#00ffcc;border-color:rgba(0,255,204,0.3)}
 
-        #ui-layer {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            width: 90%; max-width: 500px; height: 140px;
-            background: #f0f0f0; border: 6px solid #444; border-radius: 15px;
-            display: flex; flex-direction: column;
-            box-shadow: 0 15px 30px rgba(0,0,0,0.4); z-index: 10; transition: opacity 0.3s ease;
-        }
-        #text-box { flex: 1; padding: 15px; font-size: 18px; color: #222; font-weight: bold; background: #fff; border-bottom: 3px solid #ddd; border-radius: 10px 10px 0 0; line-height: 1.4; }
-        #ui-status { height: 35px; background: #444; color: #0f0; font-size: 12px; line-height: 35px; text-align: center; letter-spacing: 1px; border-radius: 0 0 10px 10px; }
-        .cursor { display: inline-block; width: 10px; height: 18px; background: #0f0; animation: blink 0.8s infinite; vertical-align: bottom; }
+/* ── BATTLE ── */
+#battle-layer{
+  position:fixed;inset:0;z-index:60;display:none;
+  flex-direction:column;opacity:0;transition:opacity 0.4s ease;
+}
+#battle-layer.visible{opacity:1}
 
-        @keyframes screenShake {
-            0%,100% { transform: translate(0,0) rotate(0deg); }
-            10% { transform: translate(-8px, 4px) rotate(-1deg); }
-            20% { transform: translate(8px,-4px) rotate(1deg); }
-            30% { transform: translate(-6px, 6px) rotate(-0.5deg); }
-            40% { transform: translate(6px,-2px) rotate(0.5deg); }
-            50% { transform: translate(-4px, 4px) rotate(-0.5deg); }
-            60% { transform: translate(4px,-4px) rotate(0deg); }
-            70% { transform: translate(-2px, 2px) rotate(0deg); }
-        }
-        .shaking { animation: screenShake 0.4s ease; }
+#battle-top{
+  flex:1;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:20px 36px 14px;
+  background:linear-gradient(180deg,#0a0a1a 0%,#0d0d22 100%);
+  position:relative;overflow:hidden;
+}
+.bt-scanlines{
+  position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 3px);
+}
+.hp-card{
+  background:#0a0a1a;border:2px solid #e94560;border-radius:12px;
+  padding:10px 16px;min-width:220px;
+  box-shadow:0 0 20px rgba(233,69,96,0.35),inset 0 0 10px rgba(0,0,0,0.5);
+  z-index:2;
+}
+#enemy-card{
+  align-self:flex-start;
+  border-color:rgba(180,0,255,0.7);
+  box-shadow:0 0 20px rgba(180,0,255,0.25),inset 0 0 10px rgba(0,0,0,0.5);
+}
+#boss-card{border-color:rgba(255,0,100,0.8);box-shadow:0 0 30px rgba(255,0,100,0.4),inset 0 0 20px rgba(0,0,0,0.5);}
+.hp-card .mon-name{
+  font-size:13px;letter-spacing:3px;color:#e94560;
+  text-transform:uppercase;margin-bottom:3px;text-shadow:0 0 8px #e94560;
+}
+#enemy-card .mon-name{color:#cc00ff;text-shadow:0 0 8px #aa00ff}
+#boss-card .mon-name{color:#ff0066;text-shadow:0 0 14px #ff0066;font-size:14px;}
+.hp-card .lv{font-size:10px;color:#555;margin-bottom:7px;letter-spacing:1px}
+.hp-bar-wrap{height:12px;background:#050510;border-radius:6px;border:1px solid #222;overflow:hidden}
+.hp-bar{
+  height:100%;border-radius:5px;transition:width 0.4s ease;position:relative;overflow:hidden;
+}
+.hp-bar::after{
+  content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent);
+  animation:shimmer 2s infinite;
+}
+@keyframes shimmer{to{left:200%}}
+.hp-bar.green{background:linear-gradient(90deg,#00ff88,#00cc66)}
+.hp-bar.yellow{background:linear-gradient(90deg,#ffcc00,#ff8800)}
+.hp-bar.red{background:linear-gradient(90deg,#ff2244,#ff5500)}
+.hp-nums{font-size:11px;color:#555;margin-top:4px;text-align:right}
+.xp-wrap{height:4px;background:#050510;border-radius:3px;margin-top:6px;border:1px solid #111;overflow:hidden}
+.xp-fill{height:100%;background:linear-gradient(90deg,#4466ff,#00aaff);border-radius:3px;transition:width 0.6s}
+.status-badge{
+  display:inline-block;font-size:9px;padding:2px 7px;border-radius:4px;
+  margin-top:5px;letter-spacing:2px;text-transform:uppercase;
+}
+.sb-bug{background:#220044;color:#cc88ff;border:1px solid #6600cc}
+.sb-ok{background:#001a0e;color:#00ff88;border:1px solid #00aa44}
+.sb-boss{background:#1a0000;color:#ff4488;border:1px solid #880022;animation:bossGlow 1s infinite alternate}
+@keyframes bossGlow{to{box-shadow:0 0 8px rgba(255,0,100,0.5)}}
 
-        #result-banner { display: none; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center; background: rgba(0,0,0,0.78); flex-direction: column; }
-        #result-banner.show { display: flex; }
-        #result-title { font-size: 52px; font-weight: bold; letter-spacing: 6px; text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 0 40px currentColor; }
-        #result-sub { font-size: 16px; letter-spacing: 3px; color: #aaa; }
-    </style>
+#battle-ground{
+  height:55px;
+  background:linear-gradient(180deg,#0a0a1a 0%,#0d0018 60%,#080014 100%);
+  border-top:2px solid rgba(180,0,255,0.3);position:relative;overflow:hidden;
+}
+#battle-ground::after{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(90deg,transparent,transparent 24px,rgba(100,0,255,0.04) 24px,rgba(100,0,255,0.04) 26px);
+}
+
+#battle-bottom{
+  height:170px;background:#07070f;border-top:3px solid #e94560;
+  display:flex;position:relative;
+}
+#battle-msg-box{
+  flex:1;padding:16px 20px;border-right:2px solid #0f0f1e;
+  display:flex;flex-direction:column;justify-content:space-between;
+}
+#battle-msg{font-size:15px;color:#d0d0ff;line-height:1.55;min-height:60px}
+.msg-cursor{
+  display:inline-block;width:7px;height:14px;background:#e94560;
+  animation:blink 0.7s infinite;vertical-align:bottom;
+}
+#battle-mode-label{font-size:9px;color:#333;letter-spacing:4px;text-transform:uppercase}
+#battle-mode-label.boss-mode{color:#ff0066}
+
+#cmd-grid{
+  width:258px;display:grid;grid-template-columns:1fr 1fr;
+  gap:7px;padding:12px;align-content:center;
+}
+.cmd-btn{
+  background:#050510;border:1px solid #e94560;color:#c0c0e0;
+  font-family:'Courier New',monospace;font-size:12px;font-weight:bold;
+  letter-spacing:1px;padding:9px 5px;border-radius:8px;cursor:pointer;
+  text-align:center;transition:all 0.1s;text-transform:uppercase;
+  box-shadow:0 0 6px rgba(233,69,96,0.15);
+}
+.cmd-btn:hover:not(:disabled){
+  background:#e94560;color:#fff;box-shadow:0 0 16px rgba(233,69,96,0.6);
+  transform:translateY(-1px);
+}
+.cmd-btn:active:not(:disabled){transform:scale(0.96)}
+.cmd-btn:disabled{opacity:0.25;cursor:not-allowed;border-color:#222}
+.cmd-btn .btn-sub{display:block;font-size:9px;color:#444;margin-top:2px;font-weight:normal;letter-spacing:0}
+.cmd-btn:hover:not(:disabled) .btn-sub{color:rgba(255,255,255,0.6)}
+#btn-heal{border-color:#00cc88;color:#66ffcc}
+#btn-heal:hover:not(:disabled){background:#00aa66;box-shadow:0 0 16px rgba(0,204,136,0.6)}
+#btn-run{border-color:#ff6600;color:#ffaa55}
+#btn-run:hover:not(:disabled){background:#cc4400;box-shadow:0 0 16px rgba(255,102,0,0.6)}
+#bottom-logo{
+  position:absolute;right:10px;bottom:6px;
+  font-size:8px;color:#1a1a2e;letter-spacing:2px;
+}
+
+/* ── HIT SPLAT ── */
+#splat-layer{position:fixed;inset:0;pointer-events:none;z-index:90}
+.splat{
+  position:absolute;font-size:28px;font-weight:bold;
+  color:#ff3355;text-shadow:0 0 12px #ff0022,2px 2px 0 #000;
+  pointer-events:none;animation:splatFly 0.9s ease forwards;
+  font-family:'Courier New',monospace;letter-spacing:-1px;
+}
+.splat.crit{
+  font-size:38px;color:#ffff00;
+  text-shadow:0 0 20px #ffaa00,2px 2px 0 #000;
+  animation:splatFly 1.1s ease forwards;
+}
+.splat.heal{
+  color:#00ff88;text-shadow:0 0 12px #00cc66,2px 2px 0 #000;
+}
+@keyframes splatFly{
+  0%{opacity:1;transform:translateY(0) scale(1)}
+  60%{opacity:1;transform:translateY(-80px) scale(1.1)}
+  100%{opacity:0;transform:translateY(-130px) scale(0.8)}
+}
+
+/* ── RESULT BANNER ── */
+#result-banner{
+  display:none;position:fixed;inset:0;z-index:300;
+  align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.85);flex-direction:column;
+}
+#result-banner.show{display:flex}
+#result-title{
+  font-size:56px;font-weight:bold;letter-spacing:8px;
+  text-transform:uppercase;margin-bottom:14px;
+  text-shadow:0 0 50px currentColor,0 0 100px currentColor;
+  animation:pulseTitle 1s ease infinite alternate;
+}
+@keyframes pulseTitle{to{letter-spacing:12px}}
+#result-sub{font-size:14px;letter-spacing:4px;color:#555;text-transform:uppercase}
+#result-xp{font-size:16px;color:#4488ff;margin-top:8px;letter-spacing:2px}
+
+/* ── LEVEL UP ── */
+#levelup-banner{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:250;display:none;text-align:center;
+  animation:lvlPop 2s ease forwards;
+}
+#levelup-banner.show{display:block}
+@keyframes lvlPop{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(0.5)}
+  15%{opacity:1;transform:translate(-50%,-60%) scale(1.2)}
+  70%{opacity:1;transform:translate(-50%,-60%) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-80%) scale(0.9)}
+}
+.lvl-text{
+  font-size:44px;font-weight:bold;color:#ffdd00;letter-spacing:6px;
+  text-shadow:0 0 30px #ffaa00,0 0 60px #ff8800;text-transform:uppercase;
+}
+.lvl-sub{font-size:14px;color:#ffcc44;letter-spacing:3px;margin-top:4px}
+
+/* ── NOTIFY ── */
+#notify{
+  position:fixed;top:16px;right:16px;z-index:150;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
+}
+.notif{
+  background:#0a0a1a;border:1px solid rgba(0,255,204,0.4);
+  border-radius:8px;padding:10px 16px;font-size:12px;color:#00ffcc;
+  letter-spacing:1px;opacity:0;pointer-events:none;
+  animation:notifSlide 3s ease forwards;
+  box-shadow:0 0 12px rgba(0,255,204,0.1);
+}
+@keyframes notifSlide{
+  0%{opacity:0;transform:translateX(20px)}
+  15%{opacity:1;transform:translateX(0)}
+  75%{opacity:1}
+  100%{opacity:0}
+}
+
+#overworld-hint{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  z-index:40;font-size:11px;letter-spacing:3px;color:#333;
+  text-transform:uppercase;pointer-events:none;
+  transition:opacity 0.3s;
+}
+</style>
 </head>
 <body>
 
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-panel">
+    <div class="hud-title">◈ Kernel Uprising</div>
+    <div class="hud-row">
+      <span class="hud-label">LVL</span>
+      <span class="hud-val" id="hud-lvl">5</span>
+    </div>
+    <div class="hud-bar-wrap"><div class="hud-bar-fill" id="hud-xp-bar" style="width:12%"></div></div>
+    <div class="hud-row">
+      <span class="hud-label">HP</span>
+      <span class="hud-val" id="hud-hp">100/100</span>
+    </div>
+    <div class="hud-bar-wrap"><div class="hud-bar-fill" id="hud-hp-bar" style="width:100%"></div></div>
+    <div class="hud-divider"></div>
+    <div class="hud-row">
+      <span class="hud-label">₿ Bits</span>
+      <span class="hud-bits" id="hud-bits">0</span>
+    </div>
+    <div class="hud-stats">
+      <span class="hud-stat-item">ATK:<span id="hud-atk">25</span></span>
+      <span class="hud-stat-item">DEF:<span id="hud-def">5</span></span>
+      <span class="hud-stat-item">POT:<span id="hud-heal">3</span></span>
+    </div>
+  </div>
+  <div id="quest-panel">
+    <div class="quest-title">◉ Active Quest</div>
+    <div class="quest-text" id="quest-text">Find the Storyteller NPC for a quest</div>
+    <div class="quest-progress"><div class="quest-bar" id="quest-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- Mini-map -->
+<div id="minimap-wrap">
+  <div id="minimap-label">⌖ Kernel Map</div>
+  <canvas id="minimap" width="120" height="120"></canvas>
+</div>
+
+<!-- Flash Overlay -->
 <div id="flash-overlay"></div>
 
-<div id="ui-layer">
-    <div id="text-box">WELCOME TO SOURCE_CODE_VILLAGE... <span class="cursor"></span></div>
-    <div id="ui-status">HP: 100/100 | LVL: 5 | MODE: OVERWORLD</div>
+<!-- Dialogue Box -->
+<div id="dialogue-box">
+  <div class="dlg-inner">
+    <div class="dlg-name" id="dlg-name">UNKNOWN</div>
+    <div class="dlg-text" id="dlg-text">...<span class="dlg-cursor"></span></div>
+    <div class="dlg-hint">[SPACE] Continue</div>
+  </div>
 </div>
 
+<!-- Shop Overlay -->
+<div id="shop-overlay">
+  <div class="shop-panel">
+    <div class="shop-header">
+      <div class="shop-title">⟨ Merchant Terminal ⟩</div>
+      <div class="shop-bits-display">₿ <span id="shop-bits-display">0</span></div>
+    </div>
+    <div class="shop-items">
+      <div class="shop-item" id="shop-item-overclock">
+        <div class="shop-item-info">
+          <div class="shop-item-name">⚡ OVERCLOCK.exe</div>
+          <div class="shop-item-desc">Permanent +8 Attack Power. Pushes your processor to the limit.</div>
+        </div>
+        <div class="shop-item-cost">
+          <span>₿ 400</span>
+          <button class="shop-buy-btn" onclick="buyItem('overclock')">BUY</button>
+        </div>
+      </div>
+      <div class="shop-item" id="shop-item-buffer">
+        <div class="shop-item-info">
+          <div class="shop-item-name">🔷 BUFFER.alloc</div>
+          <div class="shop-item-desc">Permanent +30 Max HP. Expands your memory buffer.</div>
+        </div>
+        <div class="shop-item-cost">
+          <span>₿ 300</span>
+          <button class="shop-buy-btn" onclick="buyItem('buffer')">BUY</button>
+        </div>
+      </div>
+      <div class="shop-item" id="shop-item-recovery">
+        <div class="shop-item-info">
+          <div class="shop-item-name">💊 RECOVERY.exe</div>
+          <div class="shop-item-desc">+2 Refactor charges for the next battle. Restores lost functions.</div>
+        </div>
+        <div class="shop-item-cost">
+          <span>₿ 150</span>
+          <button class="shop-buy-btn" onclick="buyItem('recovery')">BUY</button>
+        </div>
+      </div>
+      <div class="shop-item" id="shop-item-firewall">
+        <div class="shop-item-info">
+          <div class="shop-item-name">🛡 FIREWALL.conf</div>
+          <div class="shop-item-desc">Permanent +6 Defense. Reduces incoming damage.</div>
+        </div>
+        <div class="shop-item-cost">
+          <span>₿ 350</span>
+          <button class="shop-buy-btn" onclick="buyItem('firewall')">BUY</button>
+        </div>
+      </div>
+    </div>
+    <span class="shop-close" onclick="closeShop()">[ESC] Close Terminal</span>
+  </div>
+</div>
+
+<!-- Battle Layer -->
 <div id="battle-layer">
-    <div id="battle-top">
-        <div class="hp-card" id="enemy-card">
-            <div class="mon-name" id="enemy-name">BUG.exe</div>
-            <div class="lv">Lv.7 &nbsp;|&nbsp; <span class="type-bug">■ BUG</span></div>
-            <div class="hp-bar-wrap"><div class="hp-bar green" id="enemy-hp-bar" style="width:100%"></div></div>
-            <div class="hp-nums"><span id="enemy-hp-cur">80</span> / <span id="enemy-hp-max">80</span></div>
-            <span class="status-badge status-bug">CORRUPTED</span>
-        </div>
-        <div class="hp-card" id="player-card">
-            <div class="mon-name">CODER.exe</div>
-            <div class="lv">Lv.5 &nbsp;|&nbsp; <span class="type-fire">■ HUMAN</span></div>
-            <div class="hp-bar-wrap"><div class="hp-bar green" id="player-hp-bar" style="width:100%"></div></div>
-            <div class="hp-nums"><span id="player-hp-cur">100</span> / <span id="player-hp-max">100</span></div>
-            <div class="xp-bar-wrap"><div class="xp-bar" id="xp-bar" style="width:42%"></div></div>
-            <span class="status-badge status-ok">ONLINE</span>
-        </div>
+  <div id="battle-top">
+    <div class="bt-scanlines"></div>
+    <div class="hp-card" id="enemy-card">
+      <div class="mon-name" id="enemy-name">BUG.exe</div>
+      <div class="lv" id="enemy-lv">Lv.7 · <span style="color:#cc88ff">■ BUG</span></div>
+      <div class="hp-bar-wrap"><div class="hp-bar green" id="enemy-hp-bar" style="width:100%"></div></div>
+      <div class="hp-nums"><span id="enemy-hp-cur">80</span>/<span id="enemy-hp-max">80</span></div>
+      <span class="status-badge sb-bug" id="enemy-badge">CORRUPTED</span>
     </div>
-    <div id="battle-ground"></div>
-    <div id="battle-bottom">
-        <div id="battle-msg-box">
-            <div id="battle-msg">A wild <b>BUG.exe</b> appeared!<span class="msg-cursor"></span></div>
-            <div id="battle-mode-label">▶ BATTLE MODE</div>
-        </div>
-        <div id="cmd-grid">
-            <button class="cmd-btn" id="btn-debug" onclick="playerAttack()">[DEBUG]<span class="btn-type">ATK · PWR 40</span></button>
-            <button class="cmd-btn" id="btn-heal"  onclick="playerHeal()">[REFACTOR]<span class="btn-type">HEAL · +25 HP</span></button>
-            <button class="cmd-btn" id="btn-docs"  onclick="playerDocs()">[DOCS]<span class="btn-type">STATUS · INFO</span></button>
-            <button class="cmd-btn" id="btn-run"   onclick="playerRun()">[ALT+F4]<span class="btn-type">RUN · ESCAPE</span></button>
-        </div>
-        <div id="bottom-logo">CODEMON 3D v1.0</div>
+    <div class="hp-card" id="player-card">
+      <div class="mon-name">CODER.exe</div>
+      <div class="lv">Lv.<span id="bt-plvl">5</span> · <span style="color:#00ffcc">■ HUMAN</span></div>
+      <div class="hp-bar-wrap"><div class="hp-bar green" id="player-hp-bar" style="width:100%"></div></div>
+      <div class="hp-nums"><span id="player-hp-cur">100</span>/<span id="player-hp-max">100</span></div>
+      <div class="xp-wrap"><div class="xp-fill" id="bt-xp-bar" style="width:12%"></div></div>
+      <span class="status-badge sb-ok">ONLINE</span>
     </div>
+  </div>
+  <div id="battle-ground"></div>
+  <div id="battle-bottom">
+    <div id="battle-msg-box">
+      <div id="battle-msg">Initializing battle...<span class="msg-cursor"></span></div>
+      <div id="battle-mode-label">▶ BATTLE MODE</div>
+    </div>
+    <div id="cmd-grid">
+      <button class="cmd-btn" id="btn-debug"  onclick="playerAttack()">[DEBUG]<span class="btn-sub">ATK · DAMAGE</span></button>
+      <button class="cmd-btn" id="btn-heal"   onclick="playerHeal()">[REFACTOR]<span class="btn-sub">HEAL · RESTORE</span></button>
+      <button class="cmd-btn" id="btn-docs"   onclick="playerDocs()">[DOCS]<span class="btn-sub">STATUS · INFO</span></button>
+      <button class="cmd-btn" id="btn-run"    onclick="playerRun()">[ALT+F4]<span class="btn-sub">RUN · ESCAPE</span></button>
+    </div>
+    <div id="bottom-logo">CODEMON v2.0</div>
+  </div>
 </div>
 
+<!-- Hit Splat Layer -->
+<div id="splat-layer"></div>
+
+<!-- Result Banner -->
 <div id="result-banner">
-    <div id="result-title">VICTORY!</div>
-    <div id="result-sub">Returning to OVERWORLD...</div>
+  <div id="result-title">VICTORY!</div>
+  <div id="result-sub">Processing results...</div>
+  <div id="result-xp"></div>
 </div>
 
-<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }</script>
+<!-- Level Up -->
+<div id="levelup-banner">
+  <div class="lvl-text">LEVEL UP!</div>
+  <div class="lvl-sub" id="lvlup-sub">LEVEL 6 · ATK +3 · HP +10</div>
+</div>
 
+<!-- Notify -->
+<div id="notify"></div>
+
+<div id="overworld-hint">WASD / Arrows · [E] Interact · [M] Merchant</div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
 
-// ── ENGINE ──
+// ══════════════════════════════════════════
+//  CENTRAL GAME STATE
+// ══════════════════════════════════════════
+const GS = {
+  mode: 'OVERWORLD', // OVERWORLD | BATTLE | SHOP | DIALOGUE | CUTSCENE
+  player: {
+    hp: 100, maxHP: 100, bits: 0,
+    xp: 0, xpToNext: 100,
+    level: 5, attackPower: 25, defense: 5,
+    healCharges: 3, extraHealCharges: 0,
+    questActive: false, questBits: 0, questGoal: 500,
+    questComplete: false,
+  },
+  battle: {
+    enemyHP: 0, enemyMaxHP: 0,
+    enemyName: '', enemyLevel: 0,
+    playerTurn: true, locked: false,
+    isBoss: false, currentEnemy: null,
+  },
+  world: {
+    collisionSet: new Set(),
+    encounterTiles: new Set(),
+    npcs: [],
+  },
+};
+
+// ══════════════════════════════════════════
+//  SOUND MANAGER
+// ══════════════════════════════════════════
+const SFX = (() => {
+  let ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+  function tone(freq, type, dur, vol=0.08, delay=0) {
+    try {
+      const ac = getCtx();
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.connect(gain); gain.connect(ac.destination);
+      osc.type = type; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ac.currentTime + delay);
+      gain.gain.linearRampToValueAtTime(vol, ac.currentTime + delay + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + delay + dur);
+      osc.start(ac.currentTime + delay);
+      osc.stop(ac.currentTime + delay + dur + 0.01);
+    } catch(e) {}
+  }
+  return {
+    walk()  { tone(180, 'square', 0.06, 0.04) },
+    hit()   { tone(110, 'sawtooth', 0.18, 0.12); tone(55,'square',0.1,0.06,0.05) },
+    crit()  { [220,440,330].forEach((f,i)=>tone(f,'square',0.12,0.1,i*0.07)) },
+    heal()  { [330,440,550,660].forEach((f,i)=>tone(f,'sine',0.15,0.08,i*0.06)) },
+    battle(){ [100,80,60,100,120].forEach((f,i)=>tone(f,'square',0.1,0.15,i*0.1)) },
+    boss()  { [55,44,66,44,55,33].forEach((f,i)=>tone(f,'sawtooth',0.15,0.18,i*0.12)) },
+    win()   { [330,440,550,440,660].forEach((f,i)=>tone(f,'square',0.18,0.1,i*0.08)) },
+    lose()  { [220,180,150,120].forEach((f,i)=>tone(f,'sawtooth',0.2,0.15,i*0.12)) },
+    lvlup() { [440,550,660,880].forEach((f,i)=>tone(f,'square',0.22,0.12,i*0.08)) },
+    shop()  { tone(440,'sine',0.1,0.06); tone(550,'sine',0.1,0.05,0.08) },
+    buy()   { [440,660,880].forEach((f,i)=>tone(f,'sine',0.15,0.09,i*0.07)) },
+    run()   { tone(300,'sawtooth',0.15,0.08); tone(200,'sawtooth',0.1,0.06,0.1) },
+    interact(){ tone(660,'sine',0.08,0.06) },
+  };
+})();
+
+// ══════════════════════════════════════════
+//  THREE.JS ENGINE
+// ══════════════════════════════════════════
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.Fog(0x87CEEB, 15, 55);
-const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+scene.background = new THREE.Color(0x0a0a1a);
+scene.fog = new THREE.Fog(0x0a0a1a, 20, 65);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(0, 14, 18);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
 
-// ── LIGHTING ──
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(10, 20, 10);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.set(2048, 2048);
-scene.add(dirLight);
-const bugLight = new THREE.PointLight(0x9933ff, 0, 10);
-scene.add(bugLight);
+// Lights
+scene.add(new THREE.AmbientLight(0x334466, 0.9));
+const sun = new THREE.DirectionalLight(0x8888ff, 0.6);
+sun.position.set(8, 20, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.far = 100;
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -60;
+sun.shadow.camera.right = sun.shadow.camera.top = 60;
+scene.add(sun);
+const northLight = new THREE.PointLight(0x8800ff, 0, 30);
+northLight.position.set(0, 5, -50); scene.add(northLight);
+const bossLight = new THREE.PointLight(0xff0044, 0, 20);
+bossLight.position.set(0, 8, -55); scene.add(bossLight);
+const villageLight = new THREE.PointLight(0x4488ff, 0.8, 40);
+villageLight.position.set(0, 5, 0); scene.add(villageLight);
+
+// ══════════════════════════════════════════
+//  WORLD CONSTANTS + BIOME
+// ══════════════════════════════════════════
+const TILE = 2;
+const GRID = 30; // -30 to 30
+
+function getBiome(gx, gz) {
+  if (gz <= -22) return 'NORTH';
+  if (Math.abs(gx) <= 9 && gz >= -10 && gz <= 9) return 'VILLAGE';
+  return 'WOODS';
+}
+
+// ══════════════════════════════════════════
+//  MATERIALS
+// ══════════════════════════════════════════
+const M = {
+  village:    new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.8 }),
+  woods:      new THREE.MeshStandardMaterial({ color: 0x0d1a0d, roughness: 0.9 }),
+  north:      new THREE.MeshStandardMaterial({ color: 0x0a0014, roughness: 0.5, metalness: 0.3 }),
+  grass:      new THREE.MeshStandardMaterial({ color: 0x1a4d1a, roughness: 0.8 }),
+  path:       new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.7 }),
+  building:   new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.6, metalness: 0.2 }),
+  roof:       new THREE.MeshStandardMaterial({ color: 0x004466, roughness: 0.4, metalness: 0.4 }),
+  crystal:    new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x00aa88, emissiveIntensity: 0.8, metalness: 0.9, roughness: 0.1 }),
+  pipeline:   new THREE.MeshStandardMaterial({ color: 0x002244, emissive: 0x003366, emissiveIntensity: 0.5, metalness: 0.7, roughness: 0.2 }),
+  pipeGlow:   new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x0088ff, emissiveIntensity: 1.5, metalness: 0.9, roughness: 0.1 }),
+  tree:       new THREE.MeshStandardMaterial({ color: 0x0a2d0a, roughness: 0.9 }),
+  trunk:      new THREE.MeshStandardMaterial({ color: 0x2d1a0a, roughness: 0.9 }),
+  npcBlue:    new THREE.MeshStandardMaterial({ color: 0x2244cc, emissive: 0x112288, emissiveIntensity: 0.4 }),
+  npcGreen:   new THREE.MeshStandardMaterial({ color: 0x22aa44, emissive: 0x116622, emissiveIntensity: 0.4 }),
+  player:     new THREE.MeshStandardMaterial({ color: 0xcc4422 }),
+  skin:       new THREE.MeshStandardMaterial({ color: 0xffcc99 }),
+  pants:      new THREE.MeshStandardMaterial({ color: 0x223366 }),
+  bugCore:    new THREE.MeshStandardMaterial({ color: 0x8800cc, emissive: 0x440066, emissiveIntensity: 0.9, metalness: 0.4, roughness: 0.2 }),
+  bugShard:   new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0x880088, emissiveIntensity: 1.2, metalness: 0.9 }),
+  bugErr:     new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff1111, emissiveIntensity: 1.0 }),
+  drone:      new THREE.MeshStandardMaterial({ color: 0x00ccff, emissive: 0x0088cc, emissiveIntensity: 0.8, metalness: 0.8, roughness: 0.1 }),
+  laser:      new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9 }),
+  server:     new THREE.MeshStandardMaterial({ color: 0x0d0020, emissive: 0x110033, emissiveIntensity: 0.6, metalness: 0.5, roughness: 0.3 }),
+  serverLed:  new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0044, emissiveIntensity: 2.0 }),
+};
+
+// ══════════════════════════════════════════
+//  WORLD BUILDER
+// ══════════════════════════════════════════
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+
+// InstancedMesh for ground tiles
+const tileGeo = new THREE.BoxGeometry(TILE - 0.08, 0.2, TILE - 0.08);
+const biomeArrays = { VILLAGE: [], WOODS: [], NORTH: [], GRASS: [] };
+
+for (let gx = -GRID; gx <= GRID; gx++) {
+  for (let gz = -GRID; gz <= GRID; gz++) {
+    const biome = getBiome(gx, gz);
+    const isPath = biome === 'VILLAGE' && Math.abs(gx) <= 1;
+    const isGrass = biome === 'WOODS' && Math.random() < 0.42;
+    const wx = gx * TILE, wz = gz * TILE;
+    const key = `${gx},${gz}`;
+    if (isGrass) {
+      biomeArrays.GRASS.push([wx, wz]);
+      GS.world.encounterTiles.add(key);
+    } else {
+      biomeArrays[biome].push([wx, wz, isPath]);
+    }
+  }
+}
+
+function buildInstancedTiles(positions, material, yOffset = 0) {
+  const im = new THREE.InstancedMesh(tileGeo, material, positions.length);
+  im.receiveShadow = true;
+  const dummy = new THREE.Object3D();
+  positions.forEach(([x, z], i) => {
+    dummy.position.set(x, -0.1 + yOffset, z);
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  worldGroup.add(im);
+  return im;
+}
+buildInstancedTiles(biomeArrays.VILLAGE, M.village);
+buildInstancedTiles(biomeArrays.WOODS, M.woods);
+buildInstancedTiles(biomeArrays.NORTH, M.north);
+// Grass tiles (slightly raised)
+const grassGeo = new THREE.BoxGeometry(TILE - 0.08, 0.35, TILE - 0.08);
+const grassIM = new THREE.InstancedMesh(grassGeo, M.grass, biomeArrays.GRASS.length);
+grassIM.receiveShadow = true;
+const dummy2 = new THREE.Object3D();
+biomeArrays.GRASS.forEach(([x, z], i) => {
+  dummy2.position.set(x, 0.07, z);
+  dummy2.updateMatrix();
+  grassIM.setMatrixAt(i, dummy2.matrix);
+});
+grassIM.instanceMatrix.needsUpdate = true;
+worldGroup.add(grassIM);
+
+// ── TREES ──
+function addTree(wx, wz) {
+  const trunkH = 1.2 + Math.random() * 0.8;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, trunkH, 6), M.trunk.clone());
+  trunk.position.set(wx, trunkH / 2, wz); trunk.castShadow = true;
+  worldGroup.add(trunk);
+  const leafR = 0.9 + Math.random() * 0.5;
+  const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(leafR, 0), M.tree.clone());
+  leaves.position.set(wx, trunkH + leafR * 0.6, wz); leaves.castShadow = true;
+  worldGroup.add(leaves);
+  GS.world.collisionSet.add(`${Math.round(wx/TILE)},${Math.round(wz/TILE)}`);
+}
+// Dense woods trees
+for (let gx = -GRID; gx <= GRID; gx++) {
+  for (let gz = -GRID; gz <= GRID; gz++) {
+    const b = getBiome(gx, gz);
+    if (b === 'WOODS' && Math.random() < 0.18) addTree(gx * TILE, gz * TILE);
+    if ((Math.abs(gx) === GRID || Math.abs(gz) === GRID) && Math.random() < 0.5) addTree(gx * TILE, gz * TILE);
+    if (b === 'NORTH' && Math.random() < 0.08) {
+      // Server tower in north
+      const h = 2 + Math.random() * 3;
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.6, h, 0.6), M.server.clone());
+      tower.position.set(gx * TILE, h / 2, gz * TILE); tower.castShadow = true;
+      worldGroup.add(tower);
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.15), M.serverLed.clone());
+      led.position.set(gx * TILE, h + 0.05, gz * TILE);
+      worldGroup.add(led);
+      GS.world.collisionSet.add(`${gx},${gz}`);
+    }
+  }
+}
+
+// ── VILLAGE BUILDINGS ──
+function addBuilding(gx, gz, w, h, d, color = 0x223344) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w * TILE, h, d * TILE), mat);
+  body.position.set(gx * TILE, h / 2, gz * TILE); body.castShadow = true;
+  worldGroup.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w * TILE + 0.3, 0.4, d * TILE + 0.3), M.roof);
+  roof.position.set(gx * TILE, h + 0.2, gz * TILE);
+  worldGroup.add(roof);
+  // Block tiles under building
+  for (let dx = -Math.floor(w/2); dx <= Math.floor(w/2); dx++) {
+    for (let dz = -Math.floor(d/2); dz <= Math.floor(d/2); dz++) {
+      GS.world.collisionSet.add(`${gx+dx},${gz+dz}`);
+    }
+  }
+  // Windows
+  [[- w*TILE/2 + 0.3, h * 0.6, 0], [w*TILE/2 - 0.3, h * 0.6, 0]].forEach(([wx, wy, wz]) => {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x4488aa, emissiveIntensity: 0.6 }));
+    win.position.set(gx*TILE + wx, wy, gz*TILE + wz + d*TILE/2 + 0.05);
+    worldGroup.add(win);
+  });
+}
+addBuilding(0, -8, 3, 3.5, 3, 0x334455);   // Lab
+addBuilding(-5, -6, 2, 3, 2, 0x223333);     // Shop
+addBuilding(5, -6, 2, 2.5, 2, 0x334422);    // House 1
+addBuilding(-5, 4, 2, 2.5, 2, 0x332233);    // House 2
+addBuilding(5, 4, 2, 3, 2, 0x223344);       // House 3
+addBuilding(0, 7, 2, 2, 2, 0x333322);       // Inn
+
+// ── DATA CRYSTALS ──
+const crystalGeo = new THREE.OctahedronGeometry(0.3, 0);
+for (let i = 0; i < 30; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 12 + Math.random() * 18;
+  const cx = Math.cos(angle) * dist;
+  const cz = Math.sin(angle) * dist;
+  const gx = Math.round(cx / TILE), gz = Math.round(cz / TILE);
+  if (getBiome(gx, gz) === 'WOODS') {
+    const crystal = new THREE.Mesh(crystalGeo, M.crystal.clone());
+    crystal.position.set(cx, 0.5 + Math.random() * 0.5, cz);
+    crystal.userData.baseY = crystal.position.y;
+    crystal.userData.rotSpeed = 0.5 + Math.random();
+    crystal.rotation.y = Math.random() * Math.PI * 2;
+    worldGroup.add(crystal);
+    worldGroup.userData.crystals = worldGroup.userData.crystals || [];
+    worldGroup.userData.crystals.push(crystal);
+    // Crystal light
+    const cl = new THREE.PointLight(0x00ffcc, 0.4, 4);
+    cl.position.copy(crystal.position);
+    worldGroup.add(cl);
+  }
+}
+
+// ── NEON PIPELINES ──
+for (let i = 0; i < 12; i++) {
+  const gx = Math.floor(-12 + Math.random() * 24);
+  const gz = Math.floor(-20 + Math.random() * 40);
+  if (getBiome(gx, gz) === 'WOODS') {
+    const len = 1 + Math.random() * 3;
+    const horiz = Math.random() > 0.5;
+    const pipe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, len * TILE, 6),
+      M.pipeline.clone()
+    );
+    pipe.position.set(gx * TILE, 0.8 + Math.random(), gz * TILE);
+    if (horiz) pipe.rotation.z = Math.PI / 2;
+    worldGroup.add(pipe);
+    // Glow segment
+    const glow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, len * TILE * 0.6, 6),
+      M.pipeGlow.clone()
+    );
+    glow.position.copy(pipe.position);
+    if (horiz) glow.rotation.z = Math.PI / 2;
+    worldGroup.add(glow);
+  }
+}
+
+// ── NORTH STACK DECORATIONS ──
+for (let i = 0; i < 8; i++) {
+  const angle = (i / 8) * Math.PI * 2;
+  const r = 10 + Math.random() * 8;
+  const nx = Math.cos(angle) * r;
+  const nz = -45 + Math.sin(angle) * r;
+  const spike = new THREE.Mesh(
+    new THREE.ConeGeometry(0.3, 3 + Math.random() * 2, 4),
+    new THREE.MeshStandardMaterial({ color: 0x220033, emissive: 0x660066, emissiveIntensity: 0.8 })
+  );
+  spike.position.set(nx, 1.5, nz);
+  worldGroup.add(spike);
+}
+// North portal gate
+const gateL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 0.5), M.server.clone());
+gateL.position.set(-3, 2.5, -44); worldGroup.add(gateL);
+const gateR = gateL.clone(); gateR.position.set(3, 2.5, -44); worldGroup.add(gateR);
+const gateTop = new THREE.Mesh(new THREE.BoxGeometry(7, 0.5, 0.5), M.server.clone());
+gateTop.position.set(0, 5.25, -44); worldGroup.add(gateTop);
+const gateGlow = new THREE.Mesh(
+  new THREE.BoxGeometry(5.5, 4, 0.1),
+  new THREE.MeshBasicMaterial({ color: 0x8800ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+);
+gateGlow.position.set(0, 2.5, -44); worldGroup.add(gateGlow);
+// Block gate columns
+GS.world.collisionSet.add('-1,-22'); GS.world.collisionSet.add('1,-22');
+GS.world.collisionSet.add('-2,-22'); GS.world.collisionSet.add('2,-22');
+
+// ── NPC GROUP BUILDER ──
+function buildNPCMesh(color1, color2, gx, gz) {
+  const g = new THREE.Group();
+  const mat1 = new THREE.MeshStandardMaterial({ color: color1, emissive: new THREE.Color(color1).multiplyScalar(0.3) });
+  const mat2 = new THREE.MeshStandardMaterial({ color: color2, emissive: new THREE.Color(color2).multiplyScalar(0.3) });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.4, 0.6), mat1);
+  body.position.y = 0.7; body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.65), mat2);
+  head.position.y = 1.72; head.castShadow = true; g.add(head);
+  [-0.5, 0.5].forEach(x => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), mat1.clone());
+    arm.position.set(x, 0.55, 0); g.add(arm);
+  });
+  [-0.2, 0.2].forEach(x => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.6, 0.26), M.pants.clone());
+    leg.position.set(x, -0.3, 0); g.add(leg);
+  });
+  g.position.set(gx * TILE, 0, gz * TILE);
+  g.userData = { type: 'NPC', gx, gz };
+  scene.add(g);
+  GS.world.collisionSet.add(`${gx},${gz}`);
+  GS.world.npcs.push(g);
+  return g;
+}
+
+const storyteller = buildNPCMesh(0x2244cc, 0x8899ff, -4, -5);
+storyteller.userData.id = 'storyteller';
+const merchant = buildNPCMesh(0x22aa55, 0x88ffaa, 4, -5);
+merchant.userData.id = 'merchant';
+
+// Floating name tags (use PointLight as proxy for position)
+const stLight = new THREE.PointLight(0x4488ff, 0.5, 5);
+stLight.position.set(-4 * TILE, 3, -5 * TILE); scene.add(stLight);
+const mLight = new THREE.PointLight(0x44ff88, 0.5, 5);
+mLight.position.set(4 * TILE, 3, -5 * TILE); scene.add(mLight);
 
 // ── PLAYER ──
 const playerGroup = new THREE.Group();
-const mat = c => new THREE.MeshStandardMaterial({ color: c });
-
-const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.7), mat(0xff4444));
-body.position.y = 0.7; body.castShadow = true; playerGroup.add(body);
-
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.75, 0.75), mat(0xffcc99));
-head.position.y = 1.75; head.castShadow = true; playerGroup.add(head);
-
-const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.15), mat(0x111111));
-eyes.position.set(0, 1.8, 0.4); playerGroup.add(eyes);
-
-[-0.6, 0.6].forEach(x => {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.9, 0.25), mat(0xff4444));
-    arm.position.set(x, 0.6, 0); playerGroup.add(arm);
+const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.65), M.player);
+pBody.position.y = 0.7; pBody.castShadow = true; playerGroup.add(pBody);
+const pHead = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), M.skin);
+pHead.position.y = 1.75; pHead.castShadow = true; playerGroup.add(pHead);
+const pEye = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+pEye.position.set(0, 1.8, 0.36); playerGroup.add(pEye);
+[-0.55, 0.55].forEach(x => {
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.22), M.player.clone());
+  arm.position.set(x, 0.55, 0); playerGroup.add(arm);
 });
-[-0.25, 0.25].forEach(x => {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 0.3), mat(0x224488));
-    leg.position.set(x, -0.35, 0); playerGroup.add(leg);
+[-0.22, 0.22].forEach(x => {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.65, 0.27), M.pants.clone());
+  leg.position.set(x, -0.33, 0); playerGroup.add(leg);
 });
+playerGroup.position.set(0, 0, 0);
 scene.add(playerGroup);
 
-// ── BUG MONSTER ──
+// Player point light
+const playerLight = new THREE.PointLight(0x88aaff, 0.3, 6);
+scene.add(playerLight);
+
+// ── COMPANION DRONE ──
+const droneGroup = new THREE.Group();
+const droneCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), M.drone.clone());
+droneGroup.add(droneCore);
+const droneRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 6, 12), M.drone.clone());
+droneGroup.add(droneRing);
+droneGroup.position.set(-2.5, 1.5, 0.5); // Battle position
+droneGroup.visible = false;
+scene.add(droneGroup);
+const droneLight = new THREE.PointLight(0x00ccff, 0, 4);
+scene.add(droneLight);
+
+// Laser
+let laserMesh = null;
+function fireLaser(from, to) {
+  if (laserMesh) { scene.remove(laserMesh); laserMesh = null; }
+  const points = [from.clone(), to.clone()];
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  laserMesh = new THREE.Line(geo, M.laser.clone());
+  scene.add(laserMesh);
+  setTimeout(() => {
+    if (laserMesh) { scene.remove(laserMesh); laserMesh = null; }
+  }, 300);
+}
+
+// ── BUG MONSTER (Battle) ──
 const bugGroup = new THREE.Group();
-const bugCoreMat = new THREE.MeshStandardMaterial({
-    color: 0x8800cc, emissive: 0x440066, emissiveIntensity: 0.8, metalness: 0.3, roughness: 0.2
-});
-const bugCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 1), bugCoreMat);
-bugGroup.add(bugCore);
-
-const shards = [];
-const shardMat = new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0x880088, emissiveIntensity: 1, metalness: 0.8, roughness: 0.1 });
-for (let i = 0; i < 6; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), shardMat.clone());
-    s.userData = { orbitAngle: (i/6)*Math.PI*2, orbitRadius: 1.5+(i%2)*0.3, orbitSpeed: 0.8+i*0.15, orbitHeight: Math.sin(i)*0.4 };
-    shards.push(s); bugGroup.add(s);
+const bugCoreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 1), M.bugCore.clone());
+bugGroup.add(bugCoreMesh);
+const bugShards = [];
+for (let i = 0; i < 8; i++) {
+  const s = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), M.bugShard.clone());
+  s.userData = { oA: (i/8)*Math.PI*2, oR: 1.4+(i%3)*0.25, oS: 0.7+i*0.12, oH: Math.sin(i)*0.3 };
+  bugShards.push(s); bugGroup.add(s);
 }
-const errMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff1111, emissiveIntensity: 0.9 });
 for (let i = 0; i < 4; i++) {
-    const e = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.08), errMat);
-    e.userData = { orbitAngle: (i/4)*Math.PI*2+0.5, orbitRadius: 1.2, orbitSpeed: -0.5, orbitHeight: -0.3+i*0.2 };
-    shards.push(e); bugGroup.add(e);
+  const e = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), M.bugErr.clone());
+  e.userData = { oA: (i/4)*Math.PI*2+0.5, oR: 1.1, oS: -0.4, oH: -0.2+i*0.2 };
+  bugShards.push(e); bugGroup.add(e);
 }
-const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.5, 3.5),
-    new THREE.MeshBasicMaterial({ color: 0xaa00ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+const bugGlow = new THREE.Mesh(
+  new THREE.PlaneGeometry(4, 4),
+  new THREE.MeshBasicMaterial({ color: 0xaa00ff, transparent: true, opacity: 0.1, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
 );
-glow.rotation.x = -Math.PI/2; glow.position.y = -0.85;
-bugGroup.add(glow);
-bugGroup.position.set(3, 1.5, -4);
-bugGroup.visible = false;
+bugGlow.rotation.x = -Math.PI/2; bugGlow.position.y = -0.8;
+bugGroup.add(bugGlow);
+bugGroup.position.set(3, 1.5, -4); bugGroup.visible = false;
 scene.add(bugGroup);
+const bugLight = new THREE.PointLight(0x9933ff, 0, 10);
+scene.add(bugLight);
 
-// ── WORLD ──
-const TILE_SIZE = 2;
-window.grassTiles = []; window.solidObjects = [];
-
-function buildWorld() {
-    const wg = new THREE.Group();
-    for (let x = -10; x <= 10; x++) {
-        for (let z = -10; z <= 10; z++) {
-            const isGrass = Math.random() > 0.82 && (Math.abs(x)>2||Math.abs(z)>2);
-            const isPath = (x >= -2 && x <= 2 && z >= -6 && z <= -2); // Define the path area
-            const tile = new THREE.Mesh(new THREE.BoxGeometry(1.9,0.2,1.9), new THREE.MeshStandardMaterial({ color: isPath ? 0x777777 : isGrass ? 0x55cc55 : 0x77dd77 }));
-            tile.position.set(x*TILE_SIZE,-0.1,z*TILE_SIZE); tile.receiveShadow=true; wg.add(tile);
-            if (isGrass) {
-                const bl = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.4,1.6), new THREE.MeshStandardMaterial({ color: 0x228822 }));
-                bl.position.set(x*TILE_SIZE,0.2,z*TILE_SIZE); wg.add(bl);
-                window.grassTiles.push(bl);
-            }
-            if (Math.abs(x)===10||Math.abs(z)===10) createTree(x*TILE_SIZE,z*TILE_SIZE,wg);
-        }
-    }
-    const lab = new THREE.Mesh(new THREE.BoxGeometry(4,3,4), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-    lab.position.set(0,1.5,-6); lab.castShadow=true; wg.add(lab); window.solidObjects.push(lab);
-    [[-.8,2,-.8],[.8,2,-.8]].forEach(([wx,wy,wz]) => {
-        const w = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.1), new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x4488aa, emissiveIntensity: 0.4 }));
-        w.position.set(wx,wy,wz-6); wg.add(w);
-    });
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5,2,4), new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
-    roof.position.set(0,4,-6); roof.rotation.y=Math.PI/4; wg.add(roof);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.8,0.1), new THREE.MeshStandardMaterial({ color: 0xddbb77 }));
-    sign.position.set(1.5,0.8,-3.5); wg.add(sign); window.solidObjects.push(sign);
-    scene.add(wg);
+// ── BOSS MONSTER ──
+const bossGroup = new THREE.Group();
+// Main body
+const bossBody = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1),
+  new THREE.MeshStandardMaterial({ color: 0x330022, emissive: 0x880044, emissiveIntensity: 0.7, metalness: 0.5, roughness: 0.2 }));
+bossGroup.add(bossBody);
+// Crown spikes
+for (let i = 0; i < 8; i++) {
+  const angle = (i / 8) * Math.PI * 2;
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.3, 2, 4),
+    new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0xff0033, emissiveIntensity: 1.0 }));
+  spike.position.set(Math.cos(angle) * 1.8, 1.5 + Math.sin(angle * 2) * 0.3, Math.sin(angle) * 1.8);
+  spike.lookAt(spike.position.clone().multiplyScalar(3));
+  bossGroup.add(spike);
 }
-function createTree(x,z,group) {
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.35,1.2), new THREE.MeshStandardMaterial({ color: 0x663300 }));
-    trunk.position.set(x,0.6,z); trunk.castShadow=true; group.add(trunk);
-    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1,8,8), new THREE.MeshStandardMaterial({ color: 0x22aa22 }));
-    leaves.position.set(x,2.0,z); leaves.castShadow=true; group.add(leaves);
-    window.solidObjects.push(trunk);
-}
-buildWorld();
-
-// Add NPC
-const npcGroup = new THREE.Group();
-const npcBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.7), mat(0x4444ff));
-npcBody.position.y = 0.75;
-npcBody.castShadow = true;
-npcGroup.add(npcBody);
-
-const npcHead = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat(0x9999ff));
-npcHead.position.y = 1.7;
-npcHead.castShadow = true;
-npcGroup.add(npcHead);
-
-npcGroup.position.set(-2, 0, -4); // Position near the Lab
-scene.add(npcGroup);
-window.solidObjects.push(npcGroup);
-
-// Add particle system for digital rain
-const particleCount = 500;
-const particles = new THREE.BufferGeometry();
-const positions = new Float32Array(particleCount * 3);
-const colors = new Float32Array(particleCount * 3);
-const sizes = new Float32Array(particleCount);
-
-const color = new THREE.Color();
-for (let i = 0; i < particleCount; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 100;
-    positions[i * 3 + 1] = Math.random() * 100 + 20;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
-    color.setHSL(Math.random() * 0.1 + 0.6, 0.8, 0.5);
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-    sizes[i] = Math.random() * 0.5 + 0.5;
-}
-
-particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-const particleMaterial = new THREE.PointsMaterial({
-    size: 0.1,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.8
+// Eyes
+[-0.7, 0.7].forEach(x => {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8),
+    new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff4400, emissiveIntensity: 2.0 }));
+  eye.position.set(x, 0.5, 1.8);
+  bossGroup.add(eye);
 });
+// Orbiting debris
+const bossDriftGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+const bossDriftMat = new THREE.MeshStandardMaterial({ color: 0x440022, emissive: 0xcc0044, emissiveIntensity: 0.8 });
+const bossDebris = [];
+for (let i = 0; i < 12; i++) {
+  const d = new THREE.Mesh(bossDriftGeo, bossDriftMat.clone());
+  d.userData = { oA: (i/12)*Math.PI*2, oR: 3.5+(i%4)*0.5, oS: 0.3+i*0.04, oH: Math.sin(i*0.8)*1.2 };
+  bossDebris.push(d); bossGroup.add(d);
+}
+// Shadow plane
+const bossShadow = new THREE.Mesh(
+  new THREE.PlaneGeometry(8, 8),
+  new THREE.MeshBasicMaterial({ color: 0xff0044, transparent: true, opacity: 0.08, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+bossShadow.rotation.x = -Math.PI / 2; bossShadow.position.y = -2;
+bossGroup.add(bossShadow);
+bossGroup.position.set(0, 4, -55);
+scene.add(bossGroup);
 
-const particleSystem = new THREE.Points(particles, particleMaterial);
-scene.add(particleSystem);
-
-// ── STATE ──
-let gameState='OVERWORLD', isMoving=false, playerTurn=true, battleLocked=false;
-let playerHP=100, playerMaxHP=100, enemyHP=80, enemyMaxHP=80, healCharges=2;
-const targetPos = new THREE.Vector3();
-const battleCamPos  = new THREE.Vector3(-1, 2.8, 2.5);
-const battleCamLook = new THREE.Vector3(2.5, 1.2, -3.5);
-
-// Define the properties for different enemies
-const enemies = [
-    {
-        name: "BUG.exe",
-        hp: 80,
-        attackMessages: [
-            "BUG.exe threw a <b>SyntaxError</b>!",
-            "BUG.exe caused a <b>SegFault</b>! Memory corrupted!",
-            "BUG.exe injected <b>undefined behaviour</b>!",
-            "BUG.exe panicked: <b>index out of bounds</b>!",
-            "BUG.exe is leaking memory. HP <b>slowly draining</b>!"
-        ]
-    },
-    {
-        name: "GLITCH.js",
-        hp: 90,
-        attackMessages: [
-            "GLITCH.js caused a <b>TypeError</b>!",
-            "GLITCH.js is glitching out!",
-            "GLITCH.js corrupted your data!",
-            "GLITCH.js is unstable!"
-        ]
-    },
-    {
-        name: "MALWARE.msi",
-        hp: 100,
-        attackMessages: [
-            "MALWARE.msi is spreading!",
-            "MALWARE.msi corrupted your files!",
-            "MALWARE.msi is infecting your system!",
-            "MALWARE.msi is causing havoc!"
-        ]
-    }
+// ══════════════════════════════════════════
+//  ENEMY DATABASE
+// ══════════════════════════════════════════
+const ENEMIES = [
+  {
+    name: 'BUG.exe', level: 7, hp: 80, bits: 40, xp: 35,
+    atkMsgs: ['BUG.exe threw a <b>SyntaxError</b>!', 'BUG.exe caused a <b>SegFault</b>!', 'BUG.exe injected <b>undefined</b> into your stack!', 'BUG.exe panicked: <b>index out of bounds</b>!'],
+    minDmg: 8, maxDmg: 14,
+  },
+  {
+    name: 'GLITCH.js', level: 9, hp: 95, bits: 55, xp: 48,
+    atkMsgs: ['GLITCH.js caused a <b>TypeError</b>!', 'GLITCH.js corrupted your heap!', 'GLITCH.js triggered an <b>infinite loop</b>!', 'GLITCH.js overwrote your locals!'],
+    minDmg: 10, maxDmg: 17,
+  },
+  {
+    name: 'MALWARE.msi', level: 11, hp: 110, bits: 70, xp: 62,
+    atkMsgs: ['MALWARE.msi is spreading through your RAM!', 'MALWARE.msi encrypted your save file!', 'MALWARE.msi corrupted your <b>kernel</b>!', 'MALWARE.msi opened <b>36 backdoors</b>!'],
+    minDmg: 12, maxDmg: 20,
+  },
+  {
+    name: 'DEADLOCK.thread', level: 13, hp: 125, bits: 85, xp: 78,
+    atkMsgs: ['DEADLOCK froze your <b>main thread</b>!', 'DEADLOCK caused mutual exclusion <b>failure</b>!', 'DEADLOCK stalled your <b>event loop</b>!'],
+    minDmg: 14, maxDmg: 22,
+  },
 ];
+const BOSS = {
+  name: 'KERNEL MASTER', level: 30, hp: 400, bits: 500, xp: 500,
+  atkMsgs: [
+    'KERNEL MASTER triggered a <b>System Panic</b>!',
+    'KERNEL MASTER executed <b>rm -rf /</b>!',
+    'KERNEL MASTER corrupted the <b>Boot Sector</b>!',
+    'KERNEL MASTER killed all <b>daemon processes</b>!',
+    'KERNEL MASTER issued a <b>Force Reboot</b> command!',
+  ],
+  minDmg: 20, maxDmg: 35,
+};
 
-// Add a variable to track if the player is near the NPC
-let nearNPC = false;
+// ══════════════════════════════════════════
+//  STATE MANAGEMENT
+// ══════════════════════════════════════════
+let isMoving = false;
+const targetPos = new THREE.Vector3();
+let nearNPC = null;
+let battleCamMode = 'normal'; // normal | action
 
-// Initialize audio context
-const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+// Camera positions
+const CAM = {
+  normal:     { pos: new THREE.Vector3(-1, 2.8, 2.5), look: new THREE.Vector3(2.5, 1.2, -3.5) },
+  action:     { pos: new THREE.Vector3(4, 1.8, 0.5), look: new THREE.Vector3(-2, 1.5, 0) },
+  bossNormal: { pos: new THREE.Vector3(-2, 3.5, 3), look: new THREE.Vector3(3, 2, -5) },
+  bossAction: { pos: new THREE.Vector3(5, 2, 1), look: new THREE.Vector3(-2, 2, -1) },
+};
 
-// Function to create a beep sound
-function playBeep() {
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.type = 'square';
-    oscillator.frequency.value = 440;
-    gainNode.gain.value = 0.1;
-    oscillator.start();
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
-    oscillator.stop(audioContext.currentTime + 0.1);
-}
+// Dialogue state
+const dlgLines = {
+  storyteller: [
+    "Greetings, young Coder. I am the last Storyteller of Source Code Village...",
+    "The KERNEL MASTER has awakened in the North Stack. Its corrupted processes spread into the Dead Logic Woods.",
+    "We need someone brave enough to traverse the Woods, collect 500 Bits from the bugs therein...",
+    "...and use those Bits to bypass the Firewall at the North Gate. Only then can you face the Kernel Master.",
+    "The Merchant to the east can upgrade your gear. Now go — and may your code compile without errors.",
+  ],
+  merchant: [
+    "Welcome to MERCHANT TERMINAL v4.2. All transactions are final.",
+    "I stock only the finest system enhancements. What will you purchase today?",
+  ],
+  merchant_open_shop: true, // Flag to open shop after last line
+};
+let dlgState = { active: false, speaker: null, lineIdx: 0 };
 
-// Function to create a crash sound
-function playCrash() {
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.type = 'sawtooth';
-    oscillator.frequency.value = 220;
-    gainNode.gain.value = 0.2;
-    oscillator.start();
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
-    oscillator.stop(audioContext.currentTime + 0.2);
-}
+// Overworld input
+const keysDown = new Set();
+let inputCooldown = 0;
 
-// ── INPUT ──
-addEventListener('keydown', e => {
-    if (isMoving||gameState!=='OVERWORLD') return;
-    const k=e.key.toLowerCase();
-    let nx=playerGroup.position.x, nz=playerGroup.position.z;
-    if(k==='w'||e.key==='ArrowUp')    {nz-=TILE_SIZE; playerGroup.rotation.y=Math.PI;}
-    if(k==='s'||e.key==='ArrowDown')  {nz+=TILE_SIZE; playerGroup.rotation.y=0;}
-    if(k==='a'||e.key==='ArrowLeft')  {nx-=TILE_SIZE; playerGroup.rotation.y=-Math.PI/2;}
-    if(k==='d'||e.key==='ArrowRight') {nx+=TILE_SIZE; playerGroup.rotation.y= Math.PI/2;}
-    const hit=window.solidObjects.some(o=>Math.abs(o.position.x-nx)<1.1&&Math.abs(o.position.z-nz)<1.1);
-    if(!hit&&(nx!==playerGroup.position.x||nz!==playerGroup.position.z)){targetPos.set(nx,0,nz);isMoving=true; playBeep();}
-    if (e.code === 'Space' && nearNPC) {
-        setOWText("It's dangerous to debug alone! Take this REFACTOR.exe!");
-    }
+window.addEventListener('keydown', e => {
+  keysDown.add(e.key.toLowerCase());
+  if (GS.mode !== 'OVERWORLD' && GS.mode !== 'DIALOGUE') return;
+
+  if (GS.mode === 'DIALOGUE') {
+    if (e.key === ' ' || e.key === 'e' || e.key === 'Enter') advanceDialogue();
+    return;
+  }
+
+  if (e.key === 'Escape' && GS.mode === 'SHOP') { closeShop(); return; }
+  if ((e.key.toLowerCase() === 'e' || e.key === ' ') && nearNPC) { startInteract(nearNPC); SFX.interact(); return; }
+  if (e.key.toLowerCase() === 'm' && nearNPC?.userData.id === 'merchant') { openShop(); return; }
 });
+window.addEventListener('keyup', e => keysDown.delete(e.key.toLowerCase()));
 
-// ── LOOP ──
+function tryMove() {
+  if (isMoving || GS.mode !== 'OVERWORLD' || inputCooldown > 0) return;
+  let nx = playerGroup.position.x, nz = playerGroup.position.z;
+  let moved = false;
+  if (keysDown.has('w') || keysDown.has('arrowup'))    { nz -= TILE; playerGroup.rotation.y = Math.PI;   moved = true; }
+  if (keysDown.has('s') || keysDown.has('arrowdown'))  { nz += TILE; playerGroup.rotation.y = 0;         moved = true; }
+  if (keysDown.has('a') || keysDown.has('arrowleft'))  { nx -= TILE; playerGroup.rotation.y = -Math.PI/2;moved = true; }
+  if (keysDown.has('d') || keysDown.has('arrowright')) { nx += TILE; playerGroup.rotation.y = Math.PI/2; moved = true; }
+  if (!moved) return;
+  const cgx = Math.round(nx/TILE), cgz = Math.round(nz/TILE);
+  if (GS.world.collisionSet.has(`${cgx},${cgz}`)) { inputCooldown = 5; return; }
+  if (cgx < -GRID || cgx > GRID || cgz < -GRID || cgz > GRID) return;
+  targetPos.set(nx, 0, nz); isMoving = true;
+  SFX.walk();
+  inputCooldown = 12;
+}
+
+// ══════════════════════════════════════════
+//  HUD UPDATE
+// ══════════════════════════════════════════
+function updateHUD() {
+  const p = GS.player;
+  document.getElementById('hud-lvl').textContent = p.level;
+  document.getElementById('hud-hp').textContent = `${p.hp}/${p.maxHP}`;
+  document.getElementById('hud-bits').textContent = p.bits;
+  document.getElementById('hud-atk').textContent = p.attackPower;
+  document.getElementById('hud-def').textContent = p.defense;
+  document.getElementById('hud-heal').textContent = p.healCharges + p.extraHealCharges;
+  // HP bar
+  const hpp = (p.hp / p.maxHP) * 100;
+  const hpBar = document.getElementById('hud-hp-bar');
+  hpBar.style.width = hpp + '%';
+  hpBar.className = 'hud-bar-fill' + (hpp > 50 ? '' : hpp > 25 ? ' yellow' : ' red');
+  // XP bar
+  document.getElementById('hud-xp-bar').style.width = ((p.xp / p.xpToNext) * 100) + '%';
+  // Quest
+  if (p.questActive || p.questComplete) {
+    const pct = Math.min(100, (p.questBits / p.questGoal) * 100);
+    document.getElementById('quest-text').textContent =
+      p.questComplete ? '✓ Quest Complete! Bits extracted.' : `Extract ${p.questGoal - p.questBits} more Bits from bugs`;
+    document.getElementById('quest-bar').style.width = pct + '%';
+  }
+}
+
+// ── MINI-MAP ──
+const mmCanvas = document.getElementById('minimap');
+const mmCtx = mmCanvas.getContext('2d');
+const MM_SCALE = mmCanvas.width / (GRID * 2 * TILE);
+function drawMiniMap() {
+  mmCtx.clearRect(0, 0, mmCanvas.width, mmCanvas.height);
+  // Background
+  mmCtx.fillStyle = '#050510';
+  mmCtx.fillRect(0, 0, mmCanvas.width, mmCanvas.height);
+  // Draw biome zones
+  for (let gx = -GRID; gx <= GRID; gx++) {
+    for (let gz = -GRID; gz <= GRID; gz++) {
+      const b = getBiome(gx, gz);
+      const px = ((gx + GRID) * TILE) * MM_SCALE;
+      const pz = ((gz + GRID) * TILE) * MM_SCALE;
+      const sz = TILE * MM_SCALE;
+      mmCtx.fillStyle = b === 'NORTH' ? '#220033' : b === 'VILLAGE' ? '#1a2233' : '#0a1a0a';
+      mmCtx.fillRect(px, pz, sz + 0.5, sz + 0.5);
+    }
+  }
+  // Player
+  const px = ((playerGroup.position.x / TILE + GRID) * TILE) * MM_SCALE;
+  const pz = ((playerGroup.position.z / TILE + GRID) * TILE) * MM_SCALE;
+  mmCtx.fillStyle = '#ffffff';
+  mmCtx.beginPath();
+  mmCtx.arc(px, pz, 2.5, 0, Math.PI * 2);
+  mmCtx.fill();
+  // NPCs
+  [storyteller, merchant].forEach(npc => {
+    const nx = ((npc.position.x / TILE + GRID) * TILE) * MM_SCALE;
+    const nz = ((npc.position.z / TILE + GRID) * TILE) * MM_SCALE;
+    mmCtx.fillStyle = npc.userData.id === 'merchant' ? '#00ff88' : '#4488ff';
+    mmCtx.fillRect(nx - 1.5, nz - 1.5, 3, 3);
+  });
+  // Boss
+  const bx = ((bossGroup.position.x / TILE + GRID) * TILE) * MM_SCALE;
+  const bz = ((bossGroup.position.z / TILE + GRID) * TILE) * MM_SCALE;
+  mmCtx.fillStyle = '#ff0044';
+  mmCtx.beginPath();
+  mmCtx.arc(bx, bz, 3.5, 0, Math.PI * 2);
+  mmCtx.fill();
+  // Viewport indicator
+  mmCtx.strokeStyle = 'rgba(0,255,204,0.2)';
+  mmCtx.lineWidth = 0.5;
+  mmCtx.strokeRect(0, 0, mmCanvas.width, mmCanvas.height);
+}
+
+// ══════════════════════════════════════════
+//  BATTLE SYSTEM
+// ══════════════════════════════════════════
+function startBattleTransition(isBoss = false) {
+  if (GS.mode !== 'OVERWORLD') return;
+  GS.mode = 'CUTSCENE';
+  const enemy = isBoss ? BOSS : ENEMIES[Math.floor(Math.random() * ENEMIES.length)];
+  GS.battle.currentEnemy = enemy;
+  GS.battle.isBoss = isBoss;
+  notify(`!!! Wild <b>${enemy.name}</b> encountered!`);
+  const fl = document.getElementById('flash-overlay');
+  let n = 0;
+  if (isBoss) SFX.boss(); else SFX.battle();
+  (function flash() {
+    if (n >= 9) { enterBattle(); return; }
+    fl.style.opacity = n % 2 === 0 ? '1' : '0';
+    n++; setTimeout(flash, n < 5 ? 70 : 110);
+  })();
+}
+
+function enterBattle() {
+  const enemy = GS.battle.currentEnemy;
+  GS.mode = 'BATTLE';
+  GS.battle.enemyHP = enemy.hp;
+  GS.battle.enemyMaxHP = enemy.hp;
+  GS.battle.playerTurn = true;
+  GS.battle.locked = false;
+  const p = GS.player;
+
+  // Scale player size by level
+  const scale = 1 + (p.level - 5) * 0.04;
+  playerGroup.scale.set(scale, scale, scale);
+
+  document.getElementById('flash-overlay').style.opacity = '0';
+  document.getElementById('hud').style.opacity = '0';
+  document.getElementById('minimap-wrap').style.opacity = '0';
+
+  // Update battle UI
+  document.getElementById('enemy-name').textContent = enemy.name;
+  document.getElementById('enemy-lv').innerHTML = `Lv.${enemy.level} &nbsp;·&nbsp; <span style="color:#cc88ff">■ ${GS.battle.isBoss ? 'KERNEL' : 'BUG'}</span>`;
+  document.getElementById('enemy-badge').textContent = GS.battle.isBoss ? 'BOSS ENTITY' : 'CORRUPTED';
+  document.getElementById('enemy-badge').className = GS.battle.isBoss ? 'status-badge sb-boss' : 'status-badge sb-bug';
+  const enemyCard = document.getElementById('enemy-card');
+  enemyCard.className = GS.battle.isBoss ? 'hp-card' : 'hp-card';
+  enemyCard.style.borderColor = GS.battle.isBoss ? 'rgba(255,0,100,0.8)' : 'rgba(180,0,255,0.7)';
+  document.getElementById('bt-plvl').textContent = p.level;
+  document.getElementById('player-hp-max').textContent = p.maxHP;
+  document.getElementById('battle-mode-label').textContent = GS.battle.isBoss ? '▶ BOSS BATTLE' : '▶ BATTLE MODE';
+  document.getElementById('battle-mode-label').className = GS.battle.isBoss ? 'boss-mode' : '';
+
+  bugGroup.visible = true; bugLight.intensity = 2;
+  droneGroup.visible = true; droneLight.intensity = 1.5;
+
+  // Position bug at boss spot if boss
+  if (GS.battle.isBoss) {
+    bugGroup.position.set(3.5, 2.5, -5);
+    M.bugCore.color.set(0x440011);
+    M.bugCore.emissive.set(0x880022);
+  } else {
+    bugGroup.position.set(3, 1.5, -4);
+    M.bugCore.color.set(0x8800cc);
+    M.bugCore.emissive.set(0x440066);
+  }
+
+  updateBattleHPBars(); enableButtons(true);
+  const bl = document.getElementById('battle-layer');
+  bl.style.display = 'flex';
+  requestAnimationFrame(() => bl.classList.add('visible'));
+  setBattleMsg(`A wild <b>${enemy.name}</b> appeared! <span style="color:#00ffcc">[Lv.${enemy.level}]</span><span class="msg-cursor"></span>`);
+  battleCamMode = 'normal';
+}
+
+window.playerAttack = () => {
+  if (!GS.battle.playerTurn || GS.battle.locked || GS.mode !== 'BATTLE') return;
+  GS.battle.locked = true; enableButtons(false);
+  const p = GS.player;
+  const isCrit = Math.random() < 0.15;
+  let dmg = p.attackPower + Math.floor(Math.random() * 15) + Math.floor(p.level * 1.5);
+  if (isCrit) { dmg = Math.floor(dmg * 1.8); SFX.crit(); } else SFX.hit();
+  GS.battle.enemyHP = Math.max(0, GS.battle.enemyHP - dmg);
+  updateBattleHPBars(); shakeScreen();
+  // Fire laser from drone
+  fireLaser(droneGroup.position.clone().add(new THREE.Vector3(0, 0.2, 0)), bugGroup.position.clone());
+  // Flash enemy
+  M.bugCore.emissive.set(0xff0000);
+  setTimeout(() => M.bugCore.emissive.set(GS.battle.isBoss ? 0x880022 : 0x440066), 250);
+  showSplat(dmg, isCrit, false);
+  const critTxt = isCrit ? '💥 <b>CRITICAL HIT!</b> ' : '';
+  setBattleMsg(`${critTxt}You used <b>[DEBUG]</b>! Dealt <b>${dmg} dmg</b> to ${GS.battle.currentEnemy.name}!`);
+  if (GS.battle.enemyHP <= 0) { setTimeout(winBattle, 900); return; }
+  setTimeout(enemyTurn, 1100);
+};
+
+window.playerHeal = () => {
+  if (!GS.battle.playerTurn || GS.battle.locked || GS.mode !== 'BATTLE') return;
+  const total = GS.player.healCharges + GS.player.extraHealCharges;
+  if (total <= 0) { setBattleMsg("⚠ <b>REFACTOR</b> failed — no charges left! Visit the Merchant."); return; }
+  GS.battle.locked = true; enableButtons(false);
+  if (GS.player.extraHealCharges > 0) GS.player.extraHealCharges--; else GS.player.healCharges--;
+  const heal = 25 + Math.floor(Math.random() * 15) + GS.player.level;
+  GS.player.hp = Math.min(GS.player.maxHP, GS.player.hp + heal);
+  SFX.heal();
+  updateBattleHPBars(); updateHUD();
+  showSplat(heal, false, true);
+  const left = GS.player.healCharges + GS.player.extraHealCharges;
+  setBattleMsg(`You used <b>[REFACTOR]</b>! Restored <b>+${heal} HP</b>. (${left} charge${left !== 1 ? 's' : ''} left)`);
+  setTimeout(enemyTurn, 1100);
+};
+
+window.playerDocs = () => {
+  if (!GS.battle.playerTurn || GS.battle.locked || GS.mode !== 'BATTLE') return;
+  GS.battle.locked = true; enableButtons(false);
+  const e = GS.battle.currentEnemy;
+  const msgs = [
+    `📄 <b>[DOCS]</b> › ${e.name}: Level ${e.level} corrupted entity. DMG range ${e.minDmg}–${e.maxDmg}. Weakness: type assertions.`,
+    `📄 <b>[DOCS]</b> › Stack trace: <i>NullPointerException at ${e.name}:∞</i>`,
+    `📄 <b>[DOCS]</b> › ERROR 404: Documentation for ${e.name} not found. Classic.`,
+    `📄 <b>[DOCS]</b> › ${e.name} has been in prod for ${e.level * 14} days. Nobody dares touch it.`,
+  ];
+  setBattleMsg(msgs[Math.floor(Math.random() * msgs.length)]);
+  setTimeout(enemyTurn, 1400);
+};
+
+window.playerRun = () => {
+  if (!GS.battle.playerTurn || GS.battle.locked || GS.mode !== 'BATTLE') return;
+  if (GS.battle.isBoss) { setBattleMsg("🚫 <b>CANNOT ESCAPE</b> — the Kernel Master has locked all exit processes!"); return; }
+  GS.battle.locked = true; enableButtons(false);
+  SFX.run();
+  if (Math.random() > 0.45) {
+    setBattleMsg("🏃 You pressed <b>ALT+F4</b>... process is unresponsive!");
+    setTimeout(enemyTurn, 1200);
+  } else {
+    setBattleMsg("🏃 <b>ALT+F4</b> executed! Task killed. You escaped!");
+    setTimeout(exitBattle, 1400);
+  }
+};
+
+function enemyTurn() {
+  GS.battle.playerTurn = false;
+  battleCamMode = 'action'; // Switch to action cam
+  const e = GS.battle.currentEnemy;
+  const atk = e.atkMsgs[Math.floor(Math.random() * e.atkMsgs.length)];
+  const raw = e.minDmg + Math.floor(Math.random() * (e.maxDmg - e.minDmg));
+  const dmg = Math.max(1, raw - GS.player.defense);
+  GS.player.hp = Math.max(0, GS.player.hp - dmg);
+  shakeScreen(); SFX.hit();
+  updateBattleHPBars(); updateHUD();
+  setBattleMsg(`${atk} You took <b>${dmg} dmg</b>! (${GS.player.defense} absorbed by defense)`);
+  if (GS.player.hp <= 0) { setTimeout(loseBattle, 1000); return; }
+  setTimeout(() => {
+    battleCamMode = 'normal';
+    GS.battle.playerTurn = true;
+    GS.battle.locked = false;
+    enableButtons(true);
+    setBattleMsg("What will you do? ▶ Choose action...");
+  }, 1400);
+}
+
+function winBattle() {
+  enableButtons(false);
+  const e = GS.battle.currentEnemy;
+  SFX.win();
+  // Add bits and xp
+  GS.player.bits += e.bits;
+  const oldLevel = GS.player.level;
+  GS.player.xp += e.xp;
+  // Quest progress
+  if (GS.player.questActive && !GS.player.questComplete) {
+    GS.player.questBits += e.bits;
+    if (GS.player.questBits >= GS.player.questGoal) {
+      GS.player.questComplete = true;
+      notify('🎉 Quest Complete! Bits extracted. The Firewall weakens...');
+    }
+  }
+  let lvlupMsg = '';
+  while (GS.player.xp >= GS.player.xpToNext) {
+    GS.player.xp -= GS.player.xpToNext;
+    GS.player.level++;
+    GS.player.xpToNext = Math.floor(GS.player.xpToNext * 1.4);
+    GS.player.attackPower += 3;
+    GS.player.maxHP += 10;
+    GS.player.hp = Math.min(GS.player.hp + 10, GS.player.maxHP);
+    SFX.lvlup();
+    lvlupMsg = `Level Up! → Lv.${GS.player.level} · ATK +3 · MaxHP +10`;
+    triggerLevelUp(lvlupMsg);
+  }
+  document.getElementById('bt-xp-bar').style.width = ((GS.player.xp / GS.player.xpToNext) * 100) + '%';
+  updateHUD();
+  const bossStr = e.isBoss ? ' THE KERNEL IS PURGED!' : '';
+  setBattleMsg(`✅ <b>${e.name}</b> squashed!${bossStr} Gained <b>+${e.xp} XP</b> and <b>₿${e.bits} Bits</b>!`);
+  showBanner(GS.battle.isBoss ? '#ff0066' : '#00ff88', GS.battle.isBoss ? 'PURGED!' : 'VICTORY!', `+${e.xp} XP · +₿${e.bits} Bits${lvlupMsg ? ' · ' + lvlupMsg : ''}`);
+  setTimeout(exitBattle, 2800);
+}
+
+function loseBattle() {
+  enableButtons(false);
+  SFX.lose();
+  GS.player.hp = Math.floor(GS.player.maxHP * 0.3);
+  setBattleMsg("💀 <b>SYSTEM CRASH!</b> Rebooting from last save... (30% HP retained)");
+  showBanner('#ff2244', 'GAME OVER', 'Rebooting from last checkpoint...');
+  setTimeout(exitBattle, 2800);
+}
+
+function exitBattle() {
+  document.getElementById('result-banner').classList.remove('show');
+  const bl = document.getElementById('battle-layer');
+  bl.classList.remove('visible');
+  setTimeout(() => {
+    bl.style.display = 'none';
+    bugGroup.visible = false; bugLight.intensity = 0;
+    droneGroup.visible = false; droneLight.intensity = 0;
+    GS.mode = 'OVERWORLD';
+    document.getElementById('hud').style.opacity = '1';
+    document.getElementById('minimap-wrap').style.opacity = '1';
+    updateHUD();
+  }, 500);
+}
+
+function showBanner(color, title, sub) {
+  const b = document.getElementById('result-banner');
+  b.querySelector('#result-title').style.color = color;
+  b.querySelector('#result-title').textContent = title;
+  b.querySelector('#result-sub').textContent = sub;
+  b.classList.add('show');
+}
+
+function triggerLevelUp(msg) {
+  const lb = document.getElementById('levelup-banner');
+  document.getElementById('lvlup-sub').textContent = msg;
+  lb.classList.add('show');
+  setTimeout(() => lb.classList.remove('show'), 2200);
+}
+
+function setBattleMsg(h) {
+  document.getElementById('battle-msg').innerHTML = h + '<span class="msg-cursor"></span>';
+}
+
+function updateBattleHPBars() {
+  const ep = (GS.battle.enemyHP / GS.battle.enemyMaxHP) * 100;
+  const pp = (GS.player.hp / GS.player.maxHP) * 100;
+  const eb = document.getElementById('enemy-hp-bar');
+  eb.style.width = ep + '%';
+  eb.className = 'hp-bar ' + (ep > 50 ? 'green' : ep > 25 ? 'yellow' : 'red');
+  document.getElementById('enemy-hp-cur').textContent = GS.battle.enemyHP;
+  document.getElementById('enemy-hp-max').textContent = GS.battle.enemyMaxHP;
+  const pb = document.getElementById('player-hp-bar');
+  pb.style.width = pp + '%';
+  pb.className = 'hp-bar ' + (pp > 50 ? 'green' : pp > 25 ? 'yellow' : 'red');
+  document.getElementById('player-hp-cur').textContent = GS.player.hp;
+  document.getElementById('player-hp-max').textContent = GS.player.maxHP;
+}
+
+function enableButtons(on) {
+  ['btn-debug', 'btn-heal', 'btn-docs', 'btn-run'].forEach(id => {
+    document.getElementById(id).disabled = !on;
+  });
+}
+
+function shakeScreen() {
+  const el = document.getElementById('battle-layer');
+  el.classList.remove('shaking'); void el.offsetWidth; el.classList.add('shaking');
+  setTimeout(() => el.classList.remove('shaking'), 450);
+}
+
+// ── HIT SPLAT ──
+function showSplat(n, isCrit, isHeal) {
+  const el = document.createElement('div');
+  el.className = 'splat' + (isCrit ? ' crit' : '') + (isHeal ? ' heal' : '');
+  const prefix = isHeal ? '+' : isCrit ? '💥' : '-';
+  el.textContent = prefix + n;
+  el.style.left = (35 + Math.random() * 30) + '%';
+  el.style.top = (20 + Math.random() * 20) + '%';
+  document.getElementById('splat-layer').appendChild(el);
+  setTimeout(() => el.remove(), 1000);
+}
+
+// ══════════════════════════════════════════
+//  SHOP SYSTEM
+// ══════════════════════════════════════════
+function openShop() {
+  if (GS.mode !== 'OVERWORLD' && GS.mode !== 'DIALOGUE') return;
+  GS.mode = 'SHOP';
+  document.getElementById('shop-bits-display').textContent = GS.player.bits;
+  document.getElementById('shop-overlay').classList.add('open');
+  SFX.shop();
+}
+
+window.closeShop = () => {
+  document.getElementById('shop-overlay').classList.remove('open');
+  GS.mode = 'OVERWORLD';
+};
+
+window.buyItem = (id) => {
+  const costs = { overclock: 400, buffer: 300, recovery: 150, firewall: 350 };
+  const cost = costs[id];
+  if (GS.player.bits < cost) {
+    notify('⚠ Insufficient Bits!'); return;
+  }
+  GS.player.bits -= cost;
+  SFX.buy();
+  document.getElementById('shop-bits-display').textContent = GS.player.bits;
+  if (id === 'overclock') {
+    GS.player.attackPower += 8;
+    notify('⚡ OVERCLOCK.exe installed! ATK +8');
+  } else if (id === 'buffer') {
+    GS.player.maxHP += 30;
+    GS.player.hp = Math.min(GS.player.hp + 30, GS.player.maxHP);
+    notify('🔷 BUFFER.alloc applied! MaxHP +30');
+  } else if (id === 'recovery') {
+    GS.player.extraHealCharges += 2;
+    notify('💊 RECOVERY.exe loaded! +2 Heal Charges');
+  } else if (id === 'firewall') {
+    GS.player.defense += 6;
+    notify('🛡 FIREWALL.conf active! DEF +6');
+  }
+  updateHUD();
+};
+
+// ══════════════════════════════════════════
+//  DIALOGUE SYSTEM
+// ══════════════════════════════════════════
+function startInteract(npc) {
+  if (!npc) return;
+  const id = npc.userData.id;
+  if (id === 'merchant') {
+    // Short dialogue then shop
+    const lines = dlgLines.merchant;
+    showDialogue(id, 'MERCHANT.NPC', lines);
+  } else if (id === 'storyteller') {
+    if (!GS.player.questActive) GS.player.questActive = true;
+    showDialogue(id, 'STORYTELLER.NPC', dlgLines.storyteller);
+  }
+}
+
+function showDialogue(id, name, lines) {
+  GS.mode = 'DIALOGUE';
+  dlgState = { active: true, speaker: id, lines, lineIdx: 0 };
+  document.getElementById('dlg-name').textContent = name;
+  document.getElementById('dlg-text').innerHTML = lines[0] + '<span class="dlg-cursor"></span>';
+  document.getElementById('dialogue-box').style.display = 'block';
+}
+
+function advanceDialogue() {
+  if (!dlgState.active) return;
+  dlgState.lineIdx++;
+  if (dlgState.lineIdx >= dlgState.lines.length) {
+    document.getElementById('dialogue-box').style.display = 'none';
+    dlgState.active = false;
+    if (dlgState.speaker === 'merchant') {
+      openShop();
+    } else {
+      GS.mode = 'OVERWORLD';
+    }
+    updateHUD();
+    return;
+  }
+  document.getElementById('dlg-text').innerHTML = dlgState.lines[dlgState.lineIdx] + '<span class="dlg-cursor"></span>';
+}
+
+// ══════════════════════════════════════════
+//  GRASS ENCOUNTER CHECK
+// ══════════════════════════════════════════
+function checkEncounter() {
+  const gx = Math.round(playerGroup.position.x / TILE);
+  const gz = Math.round(playerGroup.position.z / TILE);
+  const key = `${gx},${gz}`;
+  // Boss check
+  if (playerGroup.position.distanceTo(bossGroup.position) < 12 && getBiome(gx, gz) === 'NORTH') {
+    if (Math.random() < 0.5) startBattleTransition(true);
+    return;
+  }
+  if (GS.world.encounterTiles.has(key) && Math.random() < 0.32) {
+    startBattleTransition(false);
+  }
+}
+
+// ══════════════════════════════════════════
+//  NOTIFY SYSTEM
+// ══════════════════════════════════════════
+function notify(msg) {
+  const el = document.createElement('div');
+  el.className = 'notif';
+  el.innerHTML = msg;
+  document.getElementById('notify').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ══════════════════════════════════════════
+//  ANIMATION LOOP
+// ══════════════════════════════════════════
 const clock = new THREE.Clock();
-(function animate(){
-    requestAnimationFrame(animate);
-    const t = clock.getElapsedTime();
-    playerGroup.position.y = Math.sin(t*3)*0.04;
+let frameCount = 0;
 
-    // Update particle positions
-    const positions = particleSystem.geometry.attributes.position.array;
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3 + 1] -= 0.1; // Move particles downward
-        if (positions[i * 3 + 1] < 0) {
-            positions[i * 3 + 1] = 50; // Reset to top if below bottom
-        }
-    }
-    particleSystem.geometry.attributes.position.needsUpdate = true;
+(function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  frameCount++;
+  inputCooldown = Math.max(0, inputCooldown - 1);
 
-    // Check if player is near the NPC
-    const distanceToNPC = playerGroup.position.distanceTo(npcGroup.position);
-    nearNPC = distanceToNPC < 2;
+  // Player movement
+  if (GS.mode === 'OVERWORLD') {
+    tryMove();
+    if (isMoving) {
+      playerGroup.position.lerp(targetPos, 0.18);
+      if (playerGroup.position.distanceTo(targetPos) < 0.06) {
+        playerGroup.position.copy(targetPos);
+        playerGroup.position.y = 0;
+        isMoving = false;
+        checkEncounter();
+      }
+    }
+    // Player bob
+    playerGroup.position.y = Math.sin(t * 3.5) * 0.04;
+    playerLight.position.copy(playerGroup.position).add(new THREE.Vector3(0, 2, 0));
 
-    if(gameState==='OVERWORLD'){
-        if(isMoving){
-            playerGroup.position.lerp(targetPos,0.15);
-            if(playerGroup.position.distanceTo(targetPos)<0.05){
-                playerGroup.position.copy(targetPos); playerGroup.position.y=0;
-                isMoving=false; checkGrass();
-            }
-        }
-        camera.position.lerp(new THREE.Vector3(playerGroup.position.x,10,playerGroup.position.z+12),0.1);
-        camera.lookAt(playerGroup.position);
-    }
-    if(gameState==='BATTLE'){
-        bugGroup.position.y=1.5+Math.sin(t*1.8)*0.18;
-        bugCore.rotation.x=t*0.5; bugCore.rotation.y=t*0.7;
-        shards.forEach(s=>{
-            const d=s.userData;
-            d.orbitAngle+=d.orbitSpeed*0.016;
-            s.position.x=Math.cos(d.orbitAngle)*d.orbitRadius;
-            s.position.z=Math.sin(d.orbitAngle)*d.orbitRadius;
-            s.position.y=d.orbitHeight+Math.sin(t*2+d.orbitAngle)*0.15;
-            s.rotation.x=t; s.rotation.y=t*1.3;
-        });
-        bugLight.intensity=1.5+Math.sin(t*3)*0.5;
-        bugLight.position.copy(bugGroup.position);
-        camera.position.lerp(battleCamPos,0.05);
-        camera.lookAt(battleCamLook);
-    }
-    renderer.render(scene,camera);
+    // NPC proximity
+    nearNPC = null;
+    [storyteller, merchant].forEach(npc => {
+      const dist = playerGroup.position.distanceTo(npc.position);
+      if (dist < TILE * 2.5) nearNPC = npc;
+      // NPC bob
+      npc.position.y = Math.sin(t * 1.8 + npc.userData.gx) * 0.04;
+    });
+    document.getElementById('overworld-hint').style.opacity = nearNPC ? '0' : '0.5';
+
+    // Camera follows player
+    const camTarget = new THREE.Vector3(playerGroup.position.x, 13, playerGroup.position.z + 15);
+    camera.position.lerp(camTarget, 0.08);
+    camera.lookAt(playerGroup.position.x, 0, playerGroup.position.z);
+
+    // North area atmosphere
+    const northDist = Math.max(0, -playerGroup.position.z - 30);
+    northLight.intensity = Math.min(2, northDist * 0.06);
+    bossLight.intensity = Math.min(3, northDist * 0.08);
+    scene.fog.color.set(northDist > 20 ? 0x110022 : 0x0a0a1a);
+  }
+
+  // Battle animations
+  if (GS.mode === 'BATTLE') {
+    bugGroup.position.y = (GS.battle.isBoss ? 2.5 : 1.5) + Math.sin(t * 1.8) * 0.18;
+    M.bugCore.emissiveIntensity = 0.8 + Math.sin(t * 3) * 0.2;
+    bugLight.intensity = 1.5 + Math.sin(t * 3.5) * 0.5;
+    bugLight.position.copy(bugGroup.position);
+    bugShards.forEach(s => {
+      const d = s.userData;
+      d.oA += d.oS * 0.016;
+      s.position.x = Math.cos(d.oA) * d.oR;
+      s.position.z = Math.sin(d.oA) * d.oR;
+      s.position.y = d.oH + Math.sin(t * 2 + d.oA) * 0.15;
+      s.rotation.x = t; s.rotation.y = t * 1.3;
+    });
+    // Drone
+    droneGroup.position.y = 1.5 + Math.sin(t * 2.5) * 0.12;
+    droneGroup.position.x = -2.5 + Math.sin(t * 1.2) * 0.08;
+    droneCore.rotation.y = t * 2;
+    droneRing.rotation.x = t; droneRing.rotation.z = t * 0.7;
+    droneLight.position.copy(droneGroup.position);
+
+    // Camera lerp to appropriate view
+    const camKey = GS.battle.isBoss
+      ? (battleCamMode === 'action' ? 'bossAction' : 'bossNormal')
+      : (battleCamMode === 'action' ? 'action' : 'normal');
+    camera.position.lerp(CAM[camKey].pos, 0.05);
+    const lookTarget = new THREE.Vector3().lerpVectors(
+      camera.position,
+      CAM[camKey].look,
+      1
+    );
+    camera.lookAt(CAM[camKey].look);
+  }
+
+  // Boss animations (always running in overworld when visible)
+  bossGroup.rotation.y = t * 0.3;
+  bossBody.rotation.x = Math.sin(t * 0.5) * 0.1;
+  bossDebris.forEach(d => {
+    const ud = d.userData;
+    ud.oA += ud.oS * 0.016;
+    d.position.x = Math.cos(ud.oA) * ud.oR;
+    d.position.z = Math.sin(ud.oA) * ud.oR;
+    d.position.y = ud.oH + Math.sin(t * 1.5 + ud.oA) * 0.3;
+    d.rotation.x = t * 0.8; d.rotation.y = t;
+  });
+  bossGroup.position.y = 4 + Math.sin(t * 0.8) * 0.3;
+
+  // Animate crystals
+  if (worldGroup.userData.crystals) {
+    worldGroup.userData.crystals.forEach(c => {
+      c.rotation.y += c.userData.rotSpeed * 0.01;
+      c.position.y = c.userData.baseY + Math.sin(t * 1.5 + c.rotation.y) * 0.15;
+    });
+  }
+
+  // Mini-map (every 3 frames)
+  if (frameCount % 3 === 0) drawMiniMap();
+
+  renderer.render(scene, camera);
 })();
 
-// ── GRASS ──
-function checkGrass(){
-    const px=playerGroup.position.x,pz=playerGroup.position.z;
-    const onG=window.grassTiles.some(g=>Math.abs(g.position.x-px)<0.6&&Math.abs(g.position.z-pz)<0.6);
-    if(onG&&Math.random()>0.72) startBattleTransition();
-    else setOWText("Exploring the codebase... <span class='cursor'></span>");
-}
-function setOWText(h){document.getElementById('text-box').innerHTML=h;}
-
-// ── TRANSITION ──
-function startBattleTransition(){
-    const fl=document.getElementById('flash-overlay');
-    let n=0;
-    const randomEnemy = enemies[Math.floor(Math.random() * enemies.length)];
-    setOWText(`!!! Wild <b>${randomEnemy.name}</b> detected in the codebase!`);
-    // Store the selected enemy in a variable accessible to other functions
-    window.currentEnemy = randomEnemy;
-    (function flash(){
-        if(n>=7){enterBattle();return;}
-        fl.style.opacity=n%2===0?'1':'0';
-        n++; setTimeout(flash,n<4?80:120);
-    })();
-}
-function enterBattle(){
-    gameState='BATTLE';
-    playerHP=playerMaxHP; enemyHP=window.currentEnemy.hp; enemyMaxHP=window.currentEnemy.hp; healCharges=2;
-    updateHPBars(); enableButtons(true);
-    playerTurn=true; battleLocked=false;
-    bugGroup.visible=true; bugLight.intensity=2;
-    document.getElementById('flash-overlay').style.opacity='0';
-    document.getElementById('ui-layer').style.cssText+='opacity:0;pointer-events:none;';
-    const bl=document.getElementById('battle-layer');
-    bl.style.display='flex';
-    requestAnimationFrame(()=>bl.classList.add('visible'));
-    setBattleMsg(`A wild <b>${window.currentEnemy.name}</b> appeared! > Choose your action...`);
-}
-
-// ── BATTLE ACTIONS ──
-window.playerAttack=()=>{
-    if(!playerTurn||battleLocked)return;
-    battleLocked=true; enableButtons(false);
-    const dmg=18+Math.floor(Math.random()*18);
-    enemyHP=Math.max(0,enemyHP-dmg); updateHPBars(); shakeScreen();
-    bugCoreMat.emissive.set(0xff0000);
-    setTimeout(()=>bugCoreMat.emissive.set(0x440066),300);
-    setBattleMsg(`You used <b>[DEBUG]</b>! Injected <b>${dmg} dmg</b> into ${window.currentEnemy.name}!`);
-    playCrash();
-    if(enemyHP<=0){setTimeout(winBattle,900);return;}
-    setTimeout(enemyTurn,1100);
-};
-window.playerHeal=()=>{
-    if(!playerTurn||battleLocked)return;
-    if(healCharges<=0){setBattleMsg("⚠ <b>REFACTOR</b> failed — no charges remaining!");return;}
-    battleLocked=true; enableButtons(false);
-    const heal=22+Math.floor(Math.random()*8);
-    playerHP=Math.min(playerMaxHP,playerHP+heal); healCharges--;
-    updateHPBars();
-    setBattleMsg(`You used <b>[REFACTOR]</b>! Restored <b>${heal} HP</b>. (${healCharges} charge${healCharges!==1?'s':''} left)`);
-    setTimeout(enemyTurn,1100);
-};
-window.playerDocs=()=>{
-    if(!playerTurn||battleLocked)return;
-    battleLocked=true; enableButtons(false);
-    const msgs=[
-        "📄 <b>[DOCS]</b> › BUG.exe: corrupted runtime entity. Weakness: type assertions.",
-        "📄 <b>[DOCS]</b> › Stack trace: <i>NullPointerException at line ∞</i>",
-        "📄 <b>[DOCS]</b> › ERROR 404: documentation not found. Classic.",
-        "📄 <b>[DOCS]</b> › BUG.exe has been in prod for 3 years. Nobody dares touch it.",
-    ];
-    setBattleMsg(msgs[Math.floor(Math.random()*msgs.length)]);
-    setTimeout(enemyTurn,1300);
-};
-window.playerRun=()=>{
-    if(!playerTurn||battleLocked)return;
-    battleLocked=true; enableButtons(false);
-    if(Math.random()>0.45){
-        setBattleMsg("🏃 You pressed <b>ALT+F4</b>... but the process is unresponsive!");
-        setTimeout(enemyTurn,1200);
-    } else {
-        setBattleMsg("🏃 <b>ALT+F4</b> executed! Process terminated. You escaped!");
-        setTimeout(exitBattle,1400);
-    }
-};
-
-function enemyTurn(){
-    playerTurn=false;
-    const atk = window.currentEnemy.attackMessages[Math.floor(Math.random() * window.currentEnemy.attackMessages.length)];
-    const dmg=10+Math.floor(Math.random()*10);
-    playerHP=Math.max(0,playerHP-dmg); updateHPBars(); shakeScreen();
-    setBattleMsg(`${atk} You took <b>${dmg} dmg</b>!`);
-    if(playerHP<=0){setTimeout(loseBattle,1000);return;}
-    setTimeout(()=>{
-        playerTurn=true; battleLocked=false; enableButtons(true);
-        setBattleMsg("What will you do? > Choose your action...");
-    },1300);
-}
-
-function winBattle(){
-    enableButtons(false);
-    setBattleMsg(`✅ <b>${window.currentEnemy.name}</b> was squashed! <b>120 XP</b> gained!`);
-    document.getElementById('xp-bar').style.width='78%';
-    showBanner('#00ff88','VICTORY!','BUG.exe squashed  |  Returning to OVERWORLD...');
-    setTimeout(exitBattle,2600);
-}
-function loseBattle(){
-    enableButtons(false);
-    setBattleMsg("💀 <b>SYSTEM CRASH!</b> You have been deleted.");
-    playerHP=playerMaxHP;
-    showBanner('#ff2244','GAME OVER','Rebooting from last save...');
-    setTimeout(exitBattle,2800);
-}
-function showBanner(color,title,sub){
-    const b=document.getElementById('result-banner');
-    b.querySelector('#result-title').style.color=color;
-    b.querySelector('#result-title').textContent=title;
-    b.querySelector('#result-sub').textContent=sub;
-    b.classList.add('show');
-}
-function exitBattle(){
-    document.getElementById('result-banner').classList.remove('show');
-    const bl=document.getElementById('battle-layer');
-    bl.classList.remove('visible');
-    setTimeout(()=>{
-        bl.style.display='none';
-        bugGroup.visible=false; bugLight.intensity=0;
-        gameState='OVERWORLD';
-        const ul=document.getElementById('ui-layer');
-        ul.style.opacity='1'; ul.style.pointerEvents='auto';
-        camera.position.set(playerGroup.position.x,10,playerGroup.position.z+12);
-        setOWText("Back in the OVERWORLD. The bugs are restless... <span class='cursor'></span>");
-        document.getElementById('ui-status').textContent=`HP: ${playerHP}/${playerMaxHP} | LVL: 5 | MODE: OVERWORLD`;
-    },500);
-}
-
-function setBattleMsg(h){document.getElementById('battle-msg').innerHTML=h+'<span class="msg-cursor"></span>';}
-function updateHPBars(){
-    const ep=(enemyHP/enemyMaxHP)*100, pp=(playerHP/playerMaxHP)*100;
-    const eb=document.getElementById('enemy-hp-bar');
-    eb.style.width=ep+'%'; eb.className='hp-bar '+(ep>50?'green':ep>25?'yellow':'red');
-    document.getElementById('enemy-hp-cur').textContent=enemyHP;
-    const pb=document.getElementById('player-hp-bar');
-    pb.style.width=pp+'%'; pb.className='hp-bar '+(pp>50?'green':pp>25?'yellow':'red');
-    document.getElementById('player-hp-cur').textContent=playerHP;
-}
-function enableButtons(on){
-    ['btn-debug','btn-heal','btn-docs','btn-run'].forEach(id=>document.getElementById(id).disabled=!on);
-}
-function shakeScreen(){
-    const el=document.getElementById('battle-layer');
-    el.classList.remove('shaking'); void el.offsetWidth; el.classList.add('shaking');
-    setTimeout(()=>el.classList.remove('shaking'),450);
-}
-
-addEventListener('resize',()=>{
-    camera.aspect=innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth,innerHeight);
+// Resize handler
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
 });
+
+// CSS for shake (add dynamically to avoid conflicts)
+const shakeStyle = document.createElement('style');
+shakeStyle.textContent = `
+  @keyframes screenShake {
+    0%,100%{transform:translate(0,0) rotate(0deg)}
+    10%{transform:translate(-7px,3px) rotate(-1deg)}
+    30%{transform:translate(7px,-3px) rotate(1deg)}
+    50%{transform:translate(-4px,4px) rotate(-0.5deg)}
+    70%{transform:translate(4px,-3px) rotate(0.3deg)}
+  }
+  .shaking{animation:screenShake 0.4s ease}
+`;
+document.head.appendChild(shakeStyle);
+
+// Init HUD
+updateHUD();
+notify('🖥 Welcome to SOURCE_CODE_VILLAGE · Find the Storyteller to begin');
 </script>
 </body>
 </html>
