@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hollow Script: The Missing Semicolon</title>
+    <style>
+        /* --- DEPARTMENT: THE ARTIST (UI & CSS) --- */
+        body {
+            background-color: #0f0f12; /* Deep code-editor background */
+            color: #dcdcdc;
+            font-family: 'Courier New', Courier, monospace; /* Monospace for code theme */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #444;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            image-rendering: pixelated; /* Retro feel */
+            background-color: #1e1e1e;
+        }
+        #ui-layer {
+            margin-top: 10px;
+            text-align: center;
+        }
+        .controls { font-size: 0.8em; color: #666; }
+        .hud { font-size: 1.2em; color: #ff5555; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="480"></canvas>
+    
+    <div id="ui-layer">
+        <div class="hud" id="statusText">STATUS: RUNNING...</div>
+        <div class="controls">ARROWS: Move | Z/SPACE: Jump | X: Debug (Attack)</div>
+    </div>
+
+<script>
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 1: THE ARCHITECT (Global Config & State)
+ * ------------------------------------------------------------------
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const BLOCK_SIZE = 32;
+
+// Input State
+const keys = {
+    right: false,
+    left: false,
+    up: false,
+    attack: false
+};
+
+// Game State
+let gameState = "PLAY"; // PLAY, GAMEOVER
+let score = 0;
+
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'ArrowRight') keys.right = true;
+    if (e.code === 'ArrowLeft') keys.left = true;
+    if (e.code === 'Space' || e.code === 'KeyZ') keys.up = true;
+    if (e.code === 'KeyX') keys.attack = true;
+    if (gameState === "GAMEOVER" && e.code === 'KeyR') resetGame();
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.code === 'ArrowRight') keys.right = false;
+    if (e.code === 'ArrowLeft') keys.left = false;
+    if (e.code === 'Space' || e.code === 'KeyZ') keys.up = false;
+    if (e.code === 'KeyX') keys.attack = false;
+});
+
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 2: THE LEVEL DESIGNER (Map Data)
+ * Legend: 0=Empty, 1=Wall, 2=Spike(Bug), 3=Exit(Bracket)
+ * ------------------------------------------------------------------
+ */
+const mapLayout = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,3,0,1],
+    [1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,1],
+    [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,1],
+    [1,0,1,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,1],
+    [1,0,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+// Helper to get tiles
+function getTile(col, row) {
+    if (row < 0 || row >= mapLayout.length || col < 0 || col >= mapLayout[0].length) return 1;
+    return mapLayout[row][col];
+}
+
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 3: THE PHYSICIST (Physics Engine)
+ * ------------------------------------------------------------------
+ */
+class PhysicsBody {
+    constructor(x, y, w, h, color) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.vx = 0;
+        this.vy = 0;
+        this.color = color;
+        this.speed = 5;
+        this.jumpForce = -12;
+        this.gravity = 0.6;
+        this.grounded = false;
+        this.isAttacking = false;
+        this.attackTimer = 0;
+        this.facingRight = true;
+    }
+
+    update() {
+        // Apply Gravity
+        this.vy += this.gravity;
+        
+        // Horizontal Movement
+        if (this === player) {
+            if (keys.right) { this.vx = this.speed; this.facingRight = true; }
+            else if (keys.left) { this.vx = -this.speed; this.facingRight = false; }
+            else { this.vx = 0; }
+
+            // Jump
+            if (keys.up && this.grounded) {
+                this.vy = this.jumpForce;
+                this.grounded = false;
+            }
+
+            // Attack Logic
+            if (keys.attack && !this.isAttacking) {
+                this.isAttacking = true;
+                this.attackTimer = 10; // Frames of attack
+            }
+            if (this.isAttacking) {
+                this.attackTimer--;
+                if (this.attackTimer <= 0) this.isAttacking = false;
+            }
+        }
+
+        // Apply Velocity
+        this.x += this.vx;
+        this.checkCollision('x');
+        this.y += this.vy;
+        this.checkCollision('y');
+        
+        // Bounds
+        if (this.y > canvas.height) die();
+    }
+
+    checkCollision(axis) {
+        // Simple AABB vs Tile Grid
+        let left = Math.floor(this.x / BLOCK_SIZE);
+        let right = Math.floor((this.x + this.w - 0.1) / BLOCK_SIZE);
+        let top = Math.floor(this.y / BLOCK_SIZE);
+        let bottom = Math.floor((this.y + this.h - 0.1) / BLOCK_SIZE);
+
+        for (let r = top; r <= bottom; r++) {
+            for (let c = left; c <= right; c++) {
+                let tile = getTile(c, r);
+                if (tile === 1) { // Solid Wall
+                    if (axis === 'x') {
+                        if (this.vx > 0) this.x = c * BLOCK_SIZE - this.w;
+                        if (this.vx < 0) this.x = (c + 1) * BLOCK_SIZE;
+                        this.vx = 0;
+                    } else {
+                        if (this.vy > 0) { // Landing
+                            this.y = r * BLOCK_SIZE - this.h;
+                            this.grounded = true;
+                        }
+                        if (this.vy < 0) this.y = (r + 1) * BLOCK_SIZE;
+                        this.vy = 0;
+                    }
+                } else if (tile === 2) { // Spikes
+                    if (this === player) die();
+                } else if (tile === 3) { // Win
+                    if (this === player) win();
+                }
+            }
+        }
+    }
+}
+
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 4: THE ARTIST (Rendering)
+ * ------------------------------------------------------------------
+ */
+function drawLevel() {
+    for (let r = 0; r < mapLayout.length; r++) {
+        for (let c = 0; c < mapLayout[0].length; c++) {
+            let tile = mapLayout[r][c];
+            if (tile === 1) {
+                // Draw Wall
+                ctx.fillStyle = '#444'; 
+                ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                // Highlight
+                ctx.strokeStyle = '#222';
+                ctx.strokeRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            } else if (tile === 2) {
+                // Draw Spike/Bug
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.moveTo(c * BLOCK_SIZE, (r+1) * BLOCK_SIZE);
+                ctx.lineTo(c * BLOCK_SIZE + 16, r * BLOCK_SIZE);
+                ctx.lineTo((c+1) * BLOCK_SIZE, (r+1) * BLOCK_SIZE);
+                ctx.fill();
+            } else if (tile === 3) {
+                // Exit
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '20px monospace';
+                ctx.fillText('};', c * BLOCK_SIZE + 5, r * BLOCK_SIZE + 20);
+            }
+        }
+    }
+}
+
+function drawPlayer(p) {
+    // Body (The Syntax Error)
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    
+    // Eyes (Hollow style)
+    ctx.fillStyle = '#000';
+    if(p.facingRight) {
+        ctx.fillRect(p.x + 18, p.y + 8, 6, 12);
+        ctx.fillRect(p.x + 22, p.y + 8, 4, 12); 
+    } else {
+        ctx.fillRect(p.x + 6, p.y + 8, 6, 12);
+        ctx.fillRect(p.x + 2, p.y + 8, 4, 12);
+    }
+
+    // Sword (The Semicolon)
+    if (p.isAttacking) {
+        ctx.fillStyle = '#FFF';
+        let swordX = p.facingRight ? p.x + p.w : p.x - 40;
+        ctx.fillRect(swordX, p.y + 20, 40, 5); // Slash
+    }
+}
+
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 5: THE COMBAT DESIGNER (Enemies)
+ * ------------------------------------------------------------------
+ */
+// Simple logic: Enemies are handled as static hazards (Spikes) in this version
+// for stability, but we add a "Ghost" patrol logic here.
+class Enemy {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 32;
+        this.h = 32;
+        this.speed = 2;
+        this.dir = 1;
+        this.distMoved = 0;
+        this.limit = 100;
+    }
+    update() {
+        this.x += this.speed * this.dir;
+        this.distMoved += this.speed;
+        if (this.distMoved > this.limit || this.distMoved < 0) {
+            this.dir *= -1;
+        }
+        
+        // Simple collision with player
+        if (this.x < player.x + player.w &&
+            this.x + this.w > player.x &&
+            this.y < player.y + player.h &&
+            this.y + this.h > player.y) {
+                // If player is attacking, kill enemy
+                if (player.isAttacking) {
+                    this.x = -1000; // Remove enemy
+                } else {
+                    die();
+                }
+        }
+    }
+    draw() {
+        if (this.x < 0) return;
+        ctx.fillStyle = 'purple';
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.fillStyle = 'white';
+        ctx.font = '12px monospace';
+        ctx.fillText("BUG", this.x+5, this.y+20);
+    }
+}
+let enemies = [new Enemy(300, 352), new Enemy(500, 256)];
+
+/**
+ * ------------------------------------------------------------------
+ * AI MODULE 6: THE WRITER & INTEGRATOR (Game Loop & Logic)
+ * ------------------------------------------------------------------
+ */
+let player = new PhysicsBody(50, 250, 30, 48, '#FFFFFF');
+
+function die() {
+    gameState = "GAMEOVER";
+    document.getElementById('statusText').innerText = "FATAL ERROR. Press 'R' to Re-compile.";
+    document.getElementById('statusText').style.color = "red";
+}
+
+function win() {
+    gameState = "GAMEOVER";
+    document.getElementById('statusText').innerText = "COMPILATION SUCCESSFUL! (You Won)";
+    document.getElementById('statusText').style.color = "#00ff00";
+}
+
+function resetGame() {
+    player.x = 50;
+    player.y = 250;
+    player.vx = 0;
+    player.vy = 0;
+    enemies = [new Enemy(300, 352), new Enemy(500, 256)]; // Reset enemies
+    gameState = "PLAY";
+    document.getElementById('statusText').innerText = "STATUS: RUNNING...";
+    document.getElementById('statusText').style.color = "white";
+}
+
+function loop() {
+    // Clear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (gameState === "PLAY") {
+        player.update();
+        enemies.forEach(e => e.update());
+    }
+
+    // Draw
+    drawLevel();
+    drawPlayer(player);
+    enemies.forEach(e => e.draw());
+
+    requestAnimationFrame(loop);
+}
+
+// Start
+loop();
+
+</script>
+</body>
+</html>
